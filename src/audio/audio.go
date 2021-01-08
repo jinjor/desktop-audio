@@ -5,7 +5,6 @@ import (
 	"io"
 	"math"
 	"strconv"
-	"time"
 
 	"github.com/hajimehoshi/oto"
 )
@@ -63,20 +62,24 @@ func (s *oscImpl) SetFreq(freq float64) {
 }
 
 type state struct {
+	lock      chan int
 	osc       osc
 	gain      float64
 	pos       int64
 	remaining []byte
 }
 
-func newState() *state {
+func newState(lock chan int) *state {
 	return &state{
+		lock: lock,
 		osc:  &oscImpl{freq: 442, kind: "sine"},
 		gain: 0,
 	}
 }
 
 func (s *state) Read(buf []byte) (int, error) {
+	<-s.lock
+	defer func() { s.lock <- 0 }()
 	calc := func(p int64) float64 {
 		return s.osc.Calc(p) * s.gain
 	}
@@ -112,8 +115,10 @@ func writeBuffer(buf []byte, start int64, channelNum int, bitDepthInBytes int, c
 }
 
 // Loop ...
-func Loop(ch chan []string) {
-	s := newState()
+func Loop(ch <-chan []string) {
+	lockCh := make(chan int, 1)
+	lockCh <- 0
+	s := newState(lockCh)
 	c, err := oto.NewContext(sampleRate, channelNum, bitDepthInBytes, bufferSizeInBytes)
 	if err != nil {
 		panic(err)
@@ -127,33 +132,36 @@ func Loop(ch chan []string) {
 			panic(err)
 		}
 	}()
-	for range time.Tick(1 * time.Millisecond) {
-		select {
-		case command := <-ch:
-			switch command[0] {
-			case "set":
-				command = command[1:]
-				switch command[0] {
-				case "osc":
-					if len(command) != 2 {
-						panic(fmt.Errorf("invalid key-value pair %v", command))
-					}
-					s.osc.Set(command[0], command[1])
-				}
-				s.osc.Set("kind", command[1])
-			case "note_on":
-				note, err := strconv.ParseInt(command[1], 10, 32)
-				if err != nil {
-					panic(err)
-				}
-				s.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
-				s.gain = 0.3
-			case "note_off":
-				s.gain = 0
-			default:
-				panic(fmt.Errorf("unknown command %v", command[0]))
+	for command := range ch {
+		processCommand(s, command)
+	}
+}
+
+func processCommand(s *state, command []string) {
+	<-s.lock
+	defer func() { s.lock <- 0 }()
+
+	switch command[0] {
+	case "set":
+		command = command[1:]
+		switch command[0] {
+		case "osc":
+			if len(command) != 2 {
+				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-		default:
+			s.osc.Set(command[0], command[1])
 		}
+		s.osc.Set("kind", command[1])
+	case "note_on":
+		note, err := strconv.ParseInt(command[1], 10, 32)
+		if err != nil {
+			panic(err)
+		}
+		s.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
+		s.gain = 0.3
+	case "note_off":
+		s.gain = 0
+	default:
+		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
 }

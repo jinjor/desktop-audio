@@ -46,7 +46,7 @@ func main() {
 	}
 }
 
-func handleConn(listener *net.Listener, commandCh chan []string) error {
+func handleConn(listener *net.Listener, commandCh chan<- []string) error {
 	conn, err := (*listener).Accept()
 	if err != nil {
 		return err
