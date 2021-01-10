@@ -1,8 +1,10 @@
 package audio
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"strconv"
 
@@ -16,6 +18,8 @@ const (
 	bufferSizeInBytes  = 4096
 	byteLengthPerCycle = 128
 )
+
+// ----- OSC ----- //
 
 type osc interface {
 	Calc(int64) float64
@@ -61,31 +65,39 @@ func (s *oscImpl) SetFreq(freq float64) {
 	s.freq = freq
 }
 
-type state struct {
-	lock      chan int
+// ----- Audio ----- //
+
+// Audio ...
+type Audio struct {
+	otoContext *oto.Context
+	CommandCh  chan []string
+	ctx        context.Context
+	paramsCh   chan *params
+}
+
+var _ io.Reader = (*Audio)(nil)
+
+type params struct {
 	osc       osc
 	gain      float64
 	pos       int64
 	remaining []byte
 }
 
-func newState(lock chan int) *state {
-	return &state{
-		lock: lock,
-		osc:  &oscImpl{freq: 442, kind: "sine"},
-		gain: 0,
+func (a *Audio) Read(buf []byte) (int, error) {
+	select {
+	case <-a.ctx.Done():
+		log.Println("Read() interrupted.")
+		return 0, io.EOF
+	case params := <-a.paramsCh:
+		defer func() { a.paramsCh <- params }()
+		calc := func(p int64) float64 {
+			return params.osc.Calc(p) * params.gain
+		}
+		writeBuffer(buf, params.pos, channelNum, bitDepthInBytes, calc)
+		params.pos += int64(len(buf))
+		return len(buf), nil // io.EOF, etc.
 	}
-}
-
-func (s *state) Read(buf []byte) (int, error) {
-	<-s.lock
-	defer func() { s.lock <- 0 }()
-	calc := func(p int64) float64 {
-		return s.osc.Calc(p) * s.gain
-	}
-	writeBuffer(buf, s.pos, channelNum, bitDepthInBytes, calc)
-	s.pos += int64(len(buf))
-	return len(buf), nil // io.EOF, etc.
 }
 
 func writeBuffer(buf []byte, start int64, channelNum int, bitDepthInBytes int, calc func(int64) float64) {
@@ -114,32 +126,38 @@ func writeBuffer(buf []byte, start int64, channelNum int, bitDepthInBytes int, c
 	}
 }
 
-// Loop ...
-func Loop(ch <-chan []string) {
-	lockCh := make(chan int, 1)
-	lockCh <- 0
-	s := newState(lockCh)
-	c, err := oto.NewContext(sampleRate, channelNum, bitDepthInBytes, bufferSizeInBytes)
+// NewAudio ...
+func NewAudio() (*Audio, error) {
+	otoContext, err := oto.NewContext(sampleRate, channelNum, bitDepthInBytes, bufferSizeInBytes)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	go func() {
-		p := c.NewPlayer()
-		if _, err := io.CopyBuffer(p, s, make([]byte, byteLengthPerCycle)); err != nil {
-			panic(err)
-		}
-		if err := p.Close(); err != nil {
-			panic(err)
-		}
-	}()
-	for command := range ch {
-		processCommand(s, command)
+	commandCh := make(chan []string, 256)
+	paramsCh := make(chan *params, 1)
+	paramsCh <- &params{
+		osc:  &oscImpl{freq: 442, kind: "sine"},
+		gain: 0,
 	}
+	audio := &Audio{
+		otoContext: otoContext,
+		CommandCh:  commandCh,
+		ctx:        context.Background(),
+		paramsCh:   paramsCh,
+	}
+	go processCommands(audio, commandCh)
+	return audio, nil
 }
 
-func processCommand(s *state, command []string) {
-	<-s.lock
-	defer func() { s.lock <- 0 }()
+func processCommands(audio *Audio, commandCh <-chan []string) {
+	for command := range commandCh {
+		audio.update(command)
+	}
+	log.Println("processCommands() ended.")
+}
+
+func (a *Audio) update(command []string) {
+	params := <-a.paramsCh
+	defer func() { a.paramsCh <- params }()
 
 	switch command[0] {
 	case "set":
@@ -149,19 +167,45 @@ func processCommand(s *state, command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			s.osc.Set(command[0], command[1])
+			params.osc.Set(command[0], command[1])
 		}
-		s.osc.Set("kind", command[1])
+		params.osc.Set("kind", command[1])
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
 			panic(err)
 		}
-		s.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
-		s.gain = 0.3
+		params.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
+		params.gain = 0.3
 	case "note_off":
-		s.gain = 0
+		params.gain = 0
 	default:
 		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
+}
+
+// Close ...
+func (a *Audio) Close() error {
+	log.Println("Closing Audio...")
+	close(a.CommandCh)
+	close(a.paramsCh)
+	return a.otoContext.Close()
+}
+
+// Start ...
+func (a *Audio) Start(ctx context.Context) error {
+	p := a.otoContext.NewPlayer()
+	defer func() {
+		if err := p.Close(); err != nil {
+			log.Printf("error: %v", err)
+		}
+	}()
+	a.ctx = ctx
+
+	// block until cancel() called
+	if _, err := io.CopyBuffer(p, a, make([]byte, byteLengthPerCycle)); err != nil {
+		return err
+	}
+	log.Println("Start() ended.")
+	return nil
 }

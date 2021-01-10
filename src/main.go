@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"io"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/jinjor/desktop-audio/src/audio"
+	"golang.org/x/sync/errgroup"
 )
 
 const sockFileName = "/tmp/desktop-audio.sock"
@@ -23,41 +25,70 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 	log.Printf("NumCPU: %v\n", runtime.NumCPU())
 
-	commandCh := make(chan []string, 256)
-	go audio.Loop(commandCh)
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	os.Remove(sockFileName)
-	listener, err := net.Listen("unix", sockFileName)
+	audio, err := audio.NewAudio()
 	if err != nil {
 		log.Fatalf("error: %v\n", err)
 	}
-	cleanupSocket := func() {
-		listener.Close()
-		os.Remove(sockFileName)
-	}
-	defer cleanupSocket()
-	handleSigs(cleanupSocket)
-	log.Printf("start listening...\n")
+	defer audio.Close()
 
-	// hanlde one long connection
-	err = handleConn(&listener, commandCh)
-	if err != nil {
-		log.Fatalf("error: %v", err)
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, os.Kill, syscall.SIGTERM)
+	defer func() {
+		signal.Stop(signalCh)
+		cancel()
+	}()
+	go func() {
+		sig := <-signalCh
+		log.Printf("Caught signal %s: shutting down...\n", sig)
+		cancel()
+	}()
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return audio.Start(ctx)
+	})
+	g.Go(func() error {
+		return receiveCommands(ctx, audio.CommandCh)
+	})
+	if err := g.Wait(); err != nil {
+		log.Fatalf("error: %v\n", err)
 	}
+	log.Println("main() ended.")
 }
 
-func handleConn(listener *net.Listener, commandCh chan<- []string) error {
-	conn, err := (*listener).Accept()
+func receiveCommands(ctx context.Context, commandCh chan<- []string) error {
+	os.Remove(sockFileName)
+	listener, err := new(net.ListenConfig).Listen(ctx, "unix", sockFileName)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		log.Println("Closeing IPC...")
+		listener.Close()
+		os.Remove(sockFileName)
+	}()
+	log.Printf("start listening...\n")
+	conn, err := listener.Accept()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 	var line []byte
+loop:
 	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Connection interrupted")
+			break loop
+		default:
+		}
 		next, isPrefix, err := reader.ReadLine()
 		if err == io.EOF {
-			break
+			break loop
 		}
 		if err != nil {
 			return err
@@ -66,39 +97,28 @@ func handleConn(listener *net.Listener, commandCh chan<- []string) error {
 		if isPrefix {
 			continue
 		}
-		lineStr := strings.Split(string(line), " ")
-		for i, item := range lineStr {
-			lineStr[i], err = url.QueryUnescape(item)
-			if err != nil {
-				return err
-			}
+		command, err := parseCommand(string(line))
+		if err != nil {
+			return err
 		}
-		commandCh <- lineStr
+		commandCh <- command
 
 		log.Printf("received: %s\n", string(line))
 		conn.Write(append(line, "\n"...))
 		line = []byte{}
 	}
-	// max 64KB
-	// scanner := bufio.NewScanner(conn)
-	// for scanner.Scan() {
-	// 	text := scanner.Text()
-	// 	log.Printf("received: %s\n", text)
-	// 	conn.Write([]byte(text + "\n"))
-	// }
-	// if err := scanner.Err(); err != nil {
-	// 	return err
-	// }
+	log.Println("receiveCommands() ended.")
 	return nil
 }
 
-func handleSigs(beforeExit func()) {
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, os.Interrupt, os.Kill, syscall.SIGTERM)
-	go func(c chan os.Signal) {
-		sig := <-c
-		log.Printf("Caught signal %s: shutting down.", sig)
-		beforeExit()
-		os.Exit(0)
-	}(sigc)
+func parseCommand(line string) ([]string, error) {
+	lineStr := strings.Split(line, " ")
+	for i, item := range lineStr {
+		escaped, err := url.QueryUnescape(item)
+		if err != nil {
+			return nil, err
+		}
+		lineStr[i] = escaped
+	}
+	return lineStr, nil
 }
