@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/rand"
 	"strconv"
 
 	"github.com/hajimehoshi/oto"
@@ -21,20 +22,12 @@ const (
 
 // ----- OSC ----- //
 
-type osc interface {
-	Calc(int64) float64
-	Set(string, string) error
-	SetFreq(float64)
-}
-
-type oscImpl struct {
+type osc struct {
 	freq float64
 	kind string
 }
 
-var _ osc = (*oscImpl)(nil)
-
-func (s *oscImpl) Calc(pos int64) float64 {
+func (s *osc) Calc(pos int64) float64 {
 	switch s.kind {
 	case "sine":
 		length := float64(sampleRate) / float64(s.freq)
@@ -44,11 +37,15 @@ func (s *oscImpl) Calc(pos int64) float64 {
 		if pos%length > length/2 {
 			return 1
 		}
-		return 0
+	case "saw":
+		length := int64(float64(sampleRate) / float64(s.freq))
+		return float64(pos%length)/float64(length)*2 - 1
+	case "noise":
+		return rand.Float64()*2 - 1
 	}
 	return 0
 }
-func (s *oscImpl) Set(key string, value string) error {
+func (s *osc) Set(key string, value string) error {
 	switch key {
 	case "freq":
 		freq, err := strconv.ParseFloat(value, 64)
@@ -61,7 +58,7 @@ func (s *oscImpl) Set(key string, value string) error {
 	}
 	return nil
 }
-func (s *oscImpl) SetFreq(freq float64) {
+func (s *osc) SetFreq(freq float64) {
 	s.freq = freq
 }
 
@@ -78,7 +75,7 @@ type Audio struct {
 var _ io.Reader = (*Audio)(nil)
 
 type params struct {
-	osc       osc
+	osc       *osc
 	gain      float64
 	pos       int64
 	remaining []byte
@@ -135,7 +132,7 @@ func NewAudio() (*Audio, error) {
 	commandCh := make(chan []string, 256)
 	paramsCh := make(chan *params, 1)
 	paramsCh <- &params{
-		osc:  &oscImpl{freq: 442, kind: "sine"},
+		osc:  &osc{freq: 442, kind: "sine"},
 		gain: 0,
 	}
 	audio := &Audio{
