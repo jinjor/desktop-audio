@@ -32,11 +32,24 @@ func (s *osc) Calc(pos int64) float64 {
 	case "sine":
 		length := float64(sampleRate) / float64(s.freq)
 		return math.Sin(2 * math.Pi * float64(pos) / length)
+	case "triangle":
+		length := int64(float64(sampleRate) / float64(s.freq))
+		if pos%length < length/2 {
+			return float64(pos%length)/float64(length)*4 - 1
+		}
+		return float64(pos%length)/float64(length)*(-4) + 3
 	case "square":
 		length := int64(float64(sampleRate) / float64(s.freq))
-		if pos%length > length/2 {
+		if pos%length < length/2 {
 			return 1
 		}
+		return -1
+	case "pluse":
+		length := int64(float64(sampleRate) / float64(s.freq))
+		if pos%length < length/4 {
+			return 1
+		}
+		return -1
 	case "saw":
 		length := int64(float64(sampleRate) / float64(s.freq))
 		return float64(pos%length)/float64(length)*2 - 1

@@ -11,7 +11,9 @@ const WaveSelect: React.FC = () => {
   return (
     <select onChange={onChange}>
       <option>sine</option>
+      <option>triangle</option>
       <option>square</option>
+      <option>pluse</option>
       <option>saw</option>
       <option>noise</option>
     </select>
