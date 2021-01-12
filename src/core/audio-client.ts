@@ -1,7 +1,7 @@
 import net from "net";
 import readline from "readline";
 import { spawn } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, unlinkSync } from "fs";
 
 const sockPath = "/tmp/desktop-audio.sock";
 
@@ -14,7 +14,7 @@ export class AudioClient {
   onError?: (err: Error) => void;
   constructor() {}
   async connect(): Promise<void> {
-    spawn("./dist/audio", [], {
+    const p = spawn("./dist/audio", [], {
       stdio: "inherit",
     });
     const interval = 100;
@@ -41,6 +41,8 @@ export class AudioClient {
       this.onDisconnected?.();
     });
     this.client.on("error", (e: Error) => {
+      p.kill("SIGINT");
+      unlinkSync(sockPath);
       this.onError?.(e);
     });
     const rl = readline.createInterface({

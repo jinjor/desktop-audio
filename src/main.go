@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jinjor/desktop-audio/src/audio"
 	"golang.org/x/sync/errgroup"
@@ -46,20 +48,26 @@ func main() {
 		log.Printf("Caught signal %s: shutting down...\n", sig)
 		cancel()
 	}()
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return audio.Start(ctx)
+	err = withIPCConnection(ctx, func(conn net.Conn) error {
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			return audio.Start(ctx)
+		})
+		g.Go(func() error {
+			return receiveCommands(ctx, conn, audio.CommandCh)
+		})
+		g.Go(func() error {
+			return sendReports(ctx, conn, audio)
+		})
+		return g.Wait()
 	})
-	g.Go(func() error {
-		return receiveCommands(ctx, audio.CommandCh)
-	})
-	if err := g.Wait(); err != nil {
+	if err != nil {
 		log.Fatalf("error: %v\n", err)
 	}
 	log.Println("main() ended.")
 }
 
-func receiveCommands(ctx context.Context, commandCh chan<- []string) error {
+func withIPCConnection(ctx context.Context, f func(net.Conn) error) error {
 	os.Remove(sockFileName)
 	listener, err := new(net.ListenConfig).Listen(ctx, "unix", sockFileName)
 	if err != nil {
@@ -67,7 +75,10 @@ func receiveCommands(ctx context.Context, commandCh chan<- []string) error {
 	}
 	defer func() {
 		log.Println("Closeing IPC...")
-		listener.Close()
+		err := listener.Close()
+		if err != nil {
+			log.Printf("error while closing listener: %v", err)
+		}
 		os.Remove(sockFileName)
 	}()
 	log.Printf("start listening...\n")
@@ -75,7 +86,16 @@ func receiveCommands(ctx context.Context, commandCh chan<- []string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("error while closing connection: %v", err)
+		}
+	}()
+	return f(conn)
+}
+
+func receiveCommands(ctx context.Context, conn net.Conn, commandCh chan<- []string) error {
 	reader := bufio.NewReader(conn)
 	var line []byte
 loop:
@@ -102,9 +122,7 @@ loop:
 			return err
 		}
 		commandCh <- command
-
 		log.Printf("received: %s\n", string(line))
-		conn.Write(append(line, "\n"...))
 		line = []byte{}
 	}
 	log.Println("receiveCommands() ended.")
@@ -121,4 +139,35 @@ func parseCommand(line string) ([]string, error) {
 		lineStr[i] = escaped
 	}
 	return lineStr, nil
+}
+
+func sendReports(ctx context.Context, conn net.Conn, audio *audio.Audio) error {
+	t := time.NewTicker(time.Second / 60)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("sendReports() interrupted")
+			break loop
+		case _ = <-t.C:
+			result := audio.GetFFT(ctx)
+			if result == nil {
+				continue
+			}
+			s := "fft"
+			for _, value := range result {
+				s += " " + strconv.FormatFloat(value, 'f', 4, 64)
+			}
+			select {
+			case <-ctx.Done():
+				log.Println("sendReports() interrupted")
+				break loop
+			default:
+				conn.Write([]byte(s + "\n"))
+			}
+		}
+	}
+	log.Println("sendReports() ended.")
+	return nil
 }

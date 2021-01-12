@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	sampleRate        = 44100
+	sampleRate        = 48000
 	channelNum        = 2
 	bitDepthInBytes   = 2
 	bufferSizeInBytes = 4096
@@ -21,6 +21,8 @@ const (
 )
 const bytesPerSample = bitDepthInBytes * channelNum
 const byteLengthPerCycle = samplesPerCycle * bytesPerSample
+
+var fft = NewFFT(samplesPerCycle, false)
 
 // ----- OSC ----- //
 
@@ -214,4 +216,16 @@ func (a *Audio) Start(ctx context.Context) error {
 	}
 	log.Println("Start() ended.")
 	return nil
+}
+
+// GetFFT ...
+func (a *Audio) GetFFT(ctx context.Context) []float64 {
+	select {
+	case <-ctx.Done():
+		log.Println("GetFFT() interrupted.")
+		return nil
+	case state := <-a.stateCh:
+		defer func() { a.stateCh <- state }()
+		return fft.CalcAbs(state.out)
+	}
 }
