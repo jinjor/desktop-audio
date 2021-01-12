@@ -13,12 +13,14 @@ import (
 )
 
 const (
-	sampleRate         = 44100
-	channelNum         = 2
-	bitDepthInBytes    = 2
-	bufferSizeInBytes  = 4096
-	byteLengthPerCycle = 128
+	sampleRate        = 44100
+	channelNum        = 2
+	bitDepthInBytes   = 2
+	bufferSizeInBytes = 4096
+	samplesPerCycle   = 128
 )
+const bytesPerSample = bitDepthInBytes * channelNum
+const byteLengthPerCycle = samplesPerCycle * bytesPerSample
 
 // ----- OSC ----- //
 
@@ -88,10 +90,10 @@ type Audio struct {
 var _ io.Reader = (*Audio)(nil)
 
 type params struct {
-	osc       *osc
-	gain      float64
-	pos       int64
-	remaining []byte
+	osc  *osc
+	gain float64
+	pos  int64
+	out  []float64
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -101,37 +103,30 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		return 0, io.EOF
 	case params := <-a.paramsCh:
 		defer func() { a.paramsCh <- params }()
-		calc := func(p int64) float64 {
-			return params.osc.Calc(p) * params.gain
+		sampleLength := int64(len(buf) / bytesPerSample)
+		for i := int64(0); i < sampleLength; i++ {
+			params.out[i] = params.osc.Calc(params.pos+i) * params.gain
 		}
-		writeBuffer(buf, params.pos, channelNum, bitDepthInBytes, calc)
-		params.pos += int64(len(buf))
+		writeBuffer(params.out, buf, 0)
+		writeBuffer(params.out, buf, 1)
+		params.pos += sampleLength
 		return len(buf), nil // io.EOF, etc.
 	}
 }
 
-func writeBuffer(buf []byte, start int64, channelNum int, bitDepthInBytes int, calc func(int64) float64) {
-	num := bitDepthInBytes * channelNum
-	p := start / int64(num)
-	switch bitDepthInBytes {
-	case 1:
-		for i := 0; i < len(buf)/num; i++ {
+func writeBuffer(out []float64, buf []byte, ch int) {
+	sampleLength := int(len(buf) / bytesPerSample)
+	for i := 0; i < sampleLength; i++ {
+		switch bitDepthInBytes {
+		case 1:
 			const max = 127
-			b := int(calc(p) * max)
-			for ch := 0; ch < channelNum; ch++ {
-				buf[num*i+ch] = byte(b + 128)
-			}
-			p++
-		}
-	case 2:
-		for i := 0; i < len(buf)/num; i++ {
+			b := int(out[i] * max)
+			buf[bytesPerSample*i+ch] = byte(b + 128)
+		case 2:
 			const max = 32767
-			b := int16(calc(p) * max)
-			for ch := 0; ch < channelNum; ch++ {
-				buf[num*i+2*ch] = byte(b)
-				buf[num*i+1+2*ch] = byte(b >> 8)
-			}
-			p++
+			b := int16(out[i] * max)
+			buf[bytesPerSample*i+2*ch] = byte(b)
+			buf[bytesPerSample*i+2*ch+1] = byte(b >> 8)
 		}
 	}
 }
@@ -147,6 +142,7 @@ func NewAudio() (*Audio, error) {
 	paramsCh <- &params{
 		osc:  &osc{freq: 442, kind: "sine"},
 		gain: 0,
+		out:  make([]float64, samplesPerCycle),
 	}
 	audio := &Audio{
 		otoContext: otoContext,
