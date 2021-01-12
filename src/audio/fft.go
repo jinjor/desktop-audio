@@ -109,3 +109,14 @@ func (fft *FFT) CalcAbs(x []float64) []float64 {
 	}
 	return x
 }
+
+// HanningWindow ...
+func HanningWindow(x []float64) []float64 {
+	n := len(x)
+	y := make([]float64, n)
+	for i := 0; i < n; i++ {
+		w := 0.5 - 0.5*math.Cos(2.0*math.Pi*float64(i)/float64(n))
+		y[i] = x[i] * w
+	}
+	return y
+}

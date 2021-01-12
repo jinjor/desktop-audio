@@ -226,6 +226,7 @@ func (a *Audio) GetFFT(ctx context.Context) []float64 {
 		return nil
 	case state := <-a.stateCh:
 		defer func() { a.stateCh <- state }()
-		return fft.CalcAbs(state.out)
+		out := HanningWindow(state.out)
+		return fft.CalcAbs(out)[:samplesPerCycle/2]
 	}
 }

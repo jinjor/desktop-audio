@@ -2,6 +2,7 @@ import { ipcRenderer } from "electron";
 import ReactDOM from "react-dom";
 import React, { useState, useEffect, useRef } from "react";
 import { Notes } from "./note";
+import { isNull } from "util";
 
 const WaveSelect: React.FC = () => {
   const onChange = (e: any) => {
@@ -29,18 +30,26 @@ const App = () => {
     ipcRenderer.on("audio", (_: any, command: string[]) => {
       setResult(JSON.stringify(command));
       if (command[0] === "fft") {
-        const canvas = canvasEl.current!;
+        if (canvasEl.current == null) {
+          return;
+        }
+        const canvas = canvasEl.current;
+        const width = canvas.width;
+        const height = canvas.height;
+        const samples = command.length - 1;
+
         const ctx = canvas.getContext("2d")!;
         ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, 128, 100);
+        ctx.fillRect(0, 0, width, height);
+
         ctx.strokeStyle = "green";
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(0, 100);
-        for (let i = 1; i < command.length; i++) {
-          const value = parseFloat(command[i]);
-          ctx.lineTo(i, (1 - value) * 100);
+        ctx.moveTo(0, height);
+        for (let i = 0; i < samples; i++) {
+          const value = parseFloat(command[i + 1]);
+          ctx.lineTo(i * (width / samples), (1 - value) * height);
         }
-        ctx.closePath();
         ctx.stroke();
       }
     });
@@ -51,7 +60,7 @@ const App = () => {
       <WaveSelect></WaveSelect>
       <Notes></Notes>
       <pre>{result}</pre>
-      <canvas width="128" height="100" ref={canvasEl}></canvas>
+      <canvas width="256" height="200" ref={canvasEl}></canvas>
     </React.Fragment>
   );
 };
