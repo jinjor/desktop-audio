@@ -45,16 +45,16 @@ func makeWTable(n int) []complex128 {
 }
 
 // Calc ...
-func (fft *FFT) Calc(x []complex128) []complex128 {
+func (fft *FFT) Calc(x []complex128) {
 	n := len(x)
 	if n != len(fft.bitReverseTable) {
 		log.Fatalf("length should be %v", len(fft.bitReverseTable))
-	} else {
-		tmp := make([]complex128, n)
-		for i := 0; i < n; i++ {
-			tmp[i] = x[fft.bitReverseTable[i]]
+	}
+	for i := 0; i < n; i++ {
+		rev := fft.bitReverseTable[i]
+		if i < rev {
+			x[i], x[rev] = x[rev], x[i]
 		}
-		x = tmp
 	}
 	for m := 1; m < n; m = m << 1 {
 		step := m << 1
@@ -77,46 +77,39 @@ func (fft *FFT) Calc(x []complex128) []complex128 {
 			x[i] /= complex(float64(n), 0)
 		}
 	}
-	return x
 }
 
 // CalcReal ...
-func (fft *FFT) CalcReal(x []float64) []float64 {
+func (fft *FFT) CalcReal(x []float64) {
 	n := len(x)
 	cx := make([]complex128, n)
 	for i := 0; i < n; i++ {
 		cx[i] = complex(x[i], 0)
 	}
-	cx = fft.Calc(cx)
-	x = make([]float64, n)
+	fft.Calc(cx)
 	for i := 0; i < n; i++ {
 		x[i] = real(cx[i])
 	}
-	return x
 }
 
 // CalcAbs ...
-func (fft *FFT) CalcAbs(x []float64) []float64 {
+func (fft *FFT) CalcAbs(x []float64) {
 	n := len(x)
 	cx := make([]complex128, n)
 	for i := 0; i < n; i++ {
 		cx[i] = complex(x[i], 0)
 	}
-	cx = fft.Calc(cx)
-	x = make([]float64, n)
+	fft.Calc(cx)
 	for i := 0; i < n; i++ {
 		x[i] = cmplx.Abs(cx[i])
 	}
-	return x
 }
 
 // HanningWindow ...
-func HanningWindow(x []float64) []float64 {
+func HanningWindow(x []float64) {
 	n := len(x)
-	y := make([]float64, n)
 	for i := 0; i < n; i++ {
 		w := 0.5 - 0.5*math.Cos(2.0*math.Pi*float64(i)/float64(n))
-		y[i] = x[i] * w
+		x[i] = x[i] * w
 	}
-	return y
 }

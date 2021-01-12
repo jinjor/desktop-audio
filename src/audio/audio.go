@@ -92,10 +92,11 @@ type Audio struct {
 var _ io.Reader = (*Audio)(nil)
 
 type state struct {
-	osc  *osc
-	gain float64
-	pos  int64
-	out  []float64
+	osc     *osc
+	gain    float64
+	pos     int64
+	out     []float64
+	fftDone bool
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -106,6 +107,7 @@ func (a *Audio) Read(buf []byte) (int, error) {
 	case state := <-a.stateCh:
 		defer func() { a.stateCh <- state }()
 		sampleLength := int64(len(buf) / bytesPerSample)
+		state.fftDone = false
 		for i := int64(0); i < sampleLength; i++ {
 			state.out[i] = state.osc.Calc(state.pos+i) * state.gain
 		}
@@ -226,7 +228,11 @@ func (a *Audio) GetFFT(ctx context.Context) []float64 {
 		return nil
 	case state := <-a.stateCh:
 		defer func() { a.stateCh <- state }()
-		out := HanningWindow(state.out)
-		return fft.CalcAbs(out)[:samplesPerCycle/2]
+		if !state.fftDone {
+			HanningWindow(state.out)
+			fft.CalcAbs(state.out)
+			state.fftDone = true
+		}
+		return state.out[:samplesPerCycle/2]
 	}
 }

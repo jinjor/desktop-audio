@@ -31,7 +31,7 @@ func TestBitreverse(t *testing.T) {
 func TestFFT(t *testing.T) {
 	fft := NewFFT(8, false)
 	x := []float64{0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25}
-	x = fft.CalcReal(x)
+	fft.CalcReal(x)
 	expectNearlyEqual(t, x[0], 4)
 	expectNearlyEqual(t, x[1], -(1 + math.Sqrt(2)/2))
 	expectNearlyEqual(t, x[2], 0)
