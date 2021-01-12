@@ -84,12 +84,12 @@ type Audio struct {
 	otoContext *oto.Context
 	CommandCh  chan []string
 	ctx        context.Context
-	paramsCh   chan *params
+	stateCh    chan *state
 }
 
 var _ io.Reader = (*Audio)(nil)
 
-type params struct {
+type state struct {
 	osc  *osc
 	gain float64
 	pos  int64
@@ -101,15 +101,15 @@ func (a *Audio) Read(buf []byte) (int, error) {
 	case <-a.ctx.Done():
 		log.Println("Read() interrupted.")
 		return 0, io.EOF
-	case params := <-a.paramsCh:
-		defer func() { a.paramsCh <- params }()
+	case state := <-a.stateCh:
+		defer func() { a.stateCh <- state }()
 		sampleLength := int64(len(buf) / bytesPerSample)
 		for i := int64(0); i < sampleLength; i++ {
-			params.out[i] = params.osc.Calc(params.pos+i) * params.gain
+			state.out[i] = state.osc.Calc(state.pos+i) * state.gain
 		}
-		writeBuffer(params.out, buf, 0)
-		writeBuffer(params.out, buf, 1)
-		params.pos += sampleLength
+		writeBuffer(state.out, buf, 0)
+		writeBuffer(state.out, buf, 1)
+		state.pos += sampleLength
 		return len(buf), nil // io.EOF, etc.
 	}
 }
@@ -138,8 +138,8 @@ func NewAudio() (*Audio, error) {
 		return nil, err
 	}
 	commandCh := make(chan []string, 256)
-	paramsCh := make(chan *params, 1)
-	paramsCh <- &params{
+	stateCh := make(chan *state, 1)
+	stateCh <- &state{
 		osc:  &osc{freq: 442, kind: "sine"},
 		gain: 0,
 		out:  make([]float64, samplesPerCycle),
@@ -148,7 +148,7 @@ func NewAudio() (*Audio, error) {
 		otoContext: otoContext,
 		CommandCh:  commandCh,
 		ctx:        context.Background(),
-		paramsCh:   paramsCh,
+		stateCh:    stateCh,
 	}
 	go processCommands(audio, commandCh)
 	return audio, nil
@@ -162,8 +162,8 @@ func processCommands(audio *Audio, commandCh <-chan []string) {
 }
 
 func (a *Audio) update(command []string) {
-	params := <-a.paramsCh
-	defer func() { a.paramsCh <- params }()
+	state := <-a.stateCh
+	defer func() { a.stateCh <- state }()
 
 	switch command[0] {
 	case "set":
@@ -173,18 +173,18 @@ func (a *Audio) update(command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			params.osc.Set(command[0], command[1])
+			state.osc.Set(command[0], command[1])
 		}
-		params.osc.Set("kind", command[1])
+		state.osc.Set("kind", command[1])
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
 			panic(err)
 		}
-		params.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
-		params.gain = 0.3
+		state.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
+		state.gain = 0.3
 	case "note_off":
-		params.gain = 0
+		state.gain = 0
 	default:
 		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
@@ -194,7 +194,7 @@ func (a *Audio) update(command []string) {
 func (a *Audio) Close() error {
 	log.Println("Closing Audio...")
 	close(a.CommandCh)
-	close(a.paramsCh)
+	close(a.stateCh)
 	return a.otoContext.Close()
 }
 
