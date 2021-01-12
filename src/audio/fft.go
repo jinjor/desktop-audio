@@ -80,10 +80,6 @@ func (fft *FFT) Calc(x []complex128) []complex128 {
 	return x
 }
 
-func w(n, k int) complex128 {
-	return cmplx.Exp(complex(0, -2.0*math.Pi/float64(n)*float64(k)))
-}
-
 // CalcReal ...
 func (fft *FFT) CalcReal(x []float64) []float64 {
 	n := len(x)
