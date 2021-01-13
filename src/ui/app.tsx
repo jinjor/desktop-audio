@@ -37,6 +37,12 @@ const App = () => {
         const width = canvas.width;
         const height = canvas.height;
         const samples = command.length - 1;
+        const fftSize = samples * 2;
+        const sampleRate = 48000;
+        const maxFreq = 24000;
+        const minFreq = 32;
+        const maxDb = -6;
+        const minDb = -100;
 
         const ctx = canvas.getContext("2d")!;
         ctx.fillStyle = "black";
@@ -48,7 +54,13 @@ const App = () => {
         ctx.moveTo(0, height);
         for (let i = 0; i < samples; i++) {
           const value = parseFloat(command[i + 1]);
-          ctx.lineTo(i * (width / samples), (1 - value) * height);
+          const freq = (sampleRate / 2) * (i / samples);
+          const x =
+            (Math.log(freq / minFreq) / Math.log(maxFreq / minFreq)) * width;
+          const db = 20 * Math.log10((value * 2) / fftSize);
+          const y = (1 - (db - minDb) / (maxDb - minDb)) * height;
+
+          ctx.lineTo(x, y);
         }
         ctx.stroke();
       }
