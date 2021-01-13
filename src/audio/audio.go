@@ -18,11 +18,12 @@ const (
 	bitDepthInBytes   = 2
 	bufferSizeInBytes = 4096
 	samplesPerCycle   = 128
+	fftSize           = 2048
 )
 const bytesPerSample = bitDepthInBytes * channelNum
 const byteLengthPerCycle = samplesPerCycle * bytesPerSample
 
-var fft = NewFFT(samplesPerCycle, false)
+var fft = NewFFT(fftSize, false)
 
 // ----- OSC ----- //
 
@@ -92,11 +93,11 @@ type Audio struct {
 var _ io.Reader = (*Audio)(nil)
 
 type state struct {
-	osc     *osc
-	gain    float64
-	pos     int64
-	out     []float64
-	fftDone bool
+	osc       *osc
+	gain      float64
+	pos       int64
+	out       []float64 // length: fftSize
+	fftResult []float64 // length: fftSize
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -107,28 +108,29 @@ func (a *Audio) Read(buf []byte) (int, error) {
 	case state := <-a.stateCh:
 		defer func() { a.stateCh <- state }()
 		sampleLength := int64(len(buf) / bytesPerSample)
-		state.fftDone = false
+		offset := state.pos % fftSize
 		for i := int64(0); i < sampleLength; i++ {
-			state.out[i] = state.osc.Calc(state.pos+i) * state.gain
+			state.out[offset+i] = state.osc.Calc(state.pos+i) * state.gain
 		}
-		writeBuffer(state.out, buf, 0)
-		writeBuffer(state.out, buf, 1)
+		writeBuffer(state.out, offset, buf, 0)
+		writeBuffer(state.out, offset, buf, 1)
 		state.pos += sampleLength
 		return len(buf), nil // io.EOF, etc.
 	}
 }
 
-func writeBuffer(out []float64, buf []byte, ch int) {
+func writeBuffer(out []float64, outOffset int64, buf []byte, ch int) {
 	sampleLength := int(len(buf) / bytesPerSample)
 	for i := 0; i < sampleLength; i++ {
+		value := out[outOffset+int64(i)]
 		switch bitDepthInBytes {
 		case 1:
 			const max = 127
-			b := int(out[i] * max)
+			b := int(value * max)
 			buf[bytesPerSample*i+ch] = byte(b + 128)
 		case 2:
 			const max = 32767
-			b := int16(out[i] * max)
+			b := int16(value * max)
 			buf[bytesPerSample*i+2*ch] = byte(b)
 			buf[bytesPerSample*i+2*ch+1] = byte(b >> 8)
 		}
@@ -144,9 +146,11 @@ func NewAudio() (*Audio, error) {
 	commandCh := make(chan []string, 256)
 	stateCh := make(chan *state, 1)
 	stateCh <- &state{
-		osc:  &osc{freq: 442, kind: "sine"},
-		gain: 0,
-		out:  make([]float64, samplesPerCycle),
+		osc:       &osc{freq: 442, kind: "sine"},
+		gain:      0,
+		pos:       0,
+		out:       make([]float64, fftSize),
+		fftResult: make([]float64, fftSize),
 	}
 	audio := &Audio{
 		otoContext: otoContext,
@@ -228,11 +232,15 @@ func (a *Audio) GetFFT(ctx context.Context) []float64 {
 		return nil
 	case state := <-a.stateCh:
 		defer func() { a.stateCh <- state }()
-		if !state.fftDone {
-			HanningWindow(state.out)
-			fft.CalcAbs(state.out)
-			state.fftDone = true
-		}
-		return state.out[:samplesPerCycle/2]
+		// out:       | 4 | 1 | 2 | 3 |
+		// offset:        ^
+		// fftResult: | 1 | 2 | 3 | 4 |
+		// return:    |<----->|
+		offset := state.pos % fftSize
+		copy(state.fftResult, state.out[offset:])
+		copy(state.fftResult[fftSize-offset:], state.out[:offset])
+		HanningWindow(state.fftResult)
+		fft.CalcAbs(state.fftResult)
+		return state.fftResult[:fftSize/2]
 	}
 }
