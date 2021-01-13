@@ -157,7 +157,7 @@ loop:
 			}
 			s := "fft"
 			for _, value := range result {
-				s += " " + strconv.FormatFloat(value, 'f', 4, 64)
+				s += " " + strconv.FormatFloat(value, 'f', 6, 64)
 			}
 			select {
 			case <-ctx.Done():
