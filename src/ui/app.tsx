@@ -2,7 +2,6 @@ import { ipcRenderer } from "electron";
 import ReactDOM from "react-dom";
 import React, { useState, useEffect, useRef } from "react";
 import { Notes } from "./note";
-import { isNull } from "util";
 
 const WaveSelect: React.FC = () => {
   const onChange = (e: any) => {
@@ -21,14 +20,12 @@ const WaveSelect: React.FC = () => {
   );
 };
 
-const App = () => {
-  const [result, setResult] = useState("");
+const Spectrum = () => {
   const canvasEl: React.MutableRefObject<HTMLCanvasElement | null> = useRef(
     null
   );
   useEffect(() => {
-    ipcRenderer.on("audio", (_: any, command: string[]) => {
-      setResult(JSON.stringify(command));
+    const callback = (_: any, command: string[]) => {
       if (command[0] === "fft") {
         if (canvasEl.current == null) {
           return;
@@ -58,12 +55,29 @@ const App = () => {
             (Math.log(freq / minFreq) / Math.log(maxFreq / minFreq)) * width;
           const db = 20 * Math.log10(value);
           const y = (1 - (db - minDb) / (maxDb - minDb)) * height;
-
           ctx.lineTo(x, y);
         }
         ctx.stroke();
       }
-    });
+    };
+    ipcRenderer.on("audio", callback);
+    return () => {
+      ipcRenderer.off("audio", callback);
+    };
+  }, []);
+  return <canvas width="512" height="200" ref={canvasEl}></canvas>;
+};
+
+const App = () => {
+  const [result, setResult] = useState("");
+  useEffect(() => {
+    const callback = (_: any, command: string[]) => {
+      setResult(JSON.stringify(command));
+    };
+    ipcRenderer.on("audio", callback);
+    return () => {
+      ipcRenderer.off("audio", callback);
+    };
   }, []);
   return (
     <React.Fragment>
@@ -71,7 +85,7 @@ const App = () => {
       <WaveSelect></WaveSelect>
       <Notes></Notes>
       <pre>{result}</pre>
-      <canvas width="256" height="200" ref={canvasEl}></canvas>
+      <Spectrum />
     </React.Fragment>
   );
 };
