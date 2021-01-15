@@ -239,7 +239,7 @@ func (a *Audio) GetFFT(ctx context.Context) []float64 {
 		offset := state.pos % fftSize
 		copy(state.fftResult, state.out[offset:])
 		copy(state.fftResult[fftSize-offset:], state.out[:offset])
-		HanningWindow(state.fftResult)
+		Han(state.fftResult)
 		fft.CalcAbs(state.fftResult)
 		for i, value := range state.fftResult {
 			state.fftResult[i] = value * 2 / fftSize

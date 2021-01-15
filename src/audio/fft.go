@@ -104,12 +104,3 @@ func (fft *FFT) CalcAbs(x []float64) {
 		x[i] = cmplx.Abs(cx[i])
 	}
 }
-
-// HanningWindow ...
-func HanningWindow(x []float64) {
-	n := len(x)
-	for i := 0; i < n; i++ {
-		w := 0.5 - 0.5*math.Cos(2.0*math.Pi*float64(i)/float64(n))
-		x[i] = x[i] * w
-	}
-}
