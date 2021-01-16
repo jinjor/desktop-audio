@@ -260,12 +260,18 @@ func (a *Audio) update(command []string) {
 		command = command[1:]
 		switch command[0] {
 		case "osc":
+			command = command[1:]
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
 			state.osc.Set(command[0], command[1])
+		case "filter":
+			command = command[1:]
+			if len(command) != 2 {
+				panic(fmt.Errorf("invalid key-value pair %v", command))
+			}
+			state.filter.Set(command[0], command[1])
 		}
-		state.osc.Set("kind", command[1])
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {

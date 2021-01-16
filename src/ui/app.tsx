@@ -6,7 +6,7 @@ import { Notes } from "./note";
 const WaveSelect: React.FC = () => {
   const onChange = (e: any) => {
     const value = e.target.value;
-    ipcRenderer.send("audio", ["set", "kind", value]);
+    ipcRenderer.send("audio", ["set", "osc", "kind", value]);
   };
   return (
     <select onChange={onChange}>
@@ -18,6 +18,26 @@ const WaveSelect: React.FC = () => {
       <option>noise</option>
     </select>
   );
+};
+
+const FilterSelect: React.FC = () => {
+  const onChange = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "filter", "kind", value]);
+  };
+  return (
+    <select onChange={onChange}>
+      <option>lowpass</option>
+    </select>
+  );
+};
+
+const FilterFreq: React.FC = () => {
+  const onInput = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "filter", "freq", value]);
+  };
+  return <input onInput={onInput} type="range" min="30" max="20000" />;
 };
 
 const Spectrum = () => {
@@ -83,6 +103,8 @@ const App = () => {
     <React.Fragment>
       <h1>Desktop Audio</h1>
       <WaveSelect></WaveSelect>
+      <FilterSelect></FilterSelect>
+      <FilterFreq></FilterFreq>
       <Notes></Notes>
       <pre>{result}</pre>
       <Spectrum />
