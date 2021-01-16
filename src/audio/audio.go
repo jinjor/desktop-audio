@@ -28,56 +28,132 @@ var fft = NewFFT(fftSize, false)
 // ----- OSC ----- //
 
 type osc struct {
-	freq float64
 	kind string
+	freq float64
 }
 
-func (s *osc) Calc(pos int64) float64 {
-	switch s.kind {
+func (o *osc) Calc(pos int64) float64 {
+	switch o.kind {
 	case "sine":
-		length := float64(sampleRate) / float64(s.freq)
+		length := float64(sampleRate) / float64(o.freq)
 		return math.Sin(2 * math.Pi * float64(pos) / length)
 	case "triangle":
-		length := int64(float64(sampleRate) / float64(s.freq))
+		length := int64(float64(sampleRate) / float64(o.freq))
 		if pos%length < length/2 {
 			return float64(pos%length)/float64(length)*4 - 1
 		}
 		return float64(pos%length)/float64(length)*(-4) + 3
 	case "square":
-		length := int64(float64(sampleRate) / float64(s.freq))
+		length := int64(float64(sampleRate) / float64(o.freq))
 		if pos%length < length/2 {
 			return 1
 		}
 		return -1
 	case "pluse":
-		length := int64(float64(sampleRate) / float64(s.freq))
+		length := int64(float64(sampleRate) / float64(o.freq))
 		if pos%length < length/4 {
 			return 1
 		}
 		return -1
 	case "saw":
-		length := int64(float64(sampleRate) / float64(s.freq))
+		length := int64(float64(sampleRate) / float64(o.freq))
 		return float64(pos%length)/float64(length)*2 - 1
 	case "noise":
 		return rand.Float64()*2 - 1
 	}
 	return 0
 }
-func (s *osc) Set(key string, value string) error {
+func (o *osc) Set(key string, value string) error {
 	switch key {
+	case "kind":
+		o.kind = value
 	case "freq":
 		freq, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
-		s.SetFreq(freq)
-	case "kind":
-		s.kind = value
+		o.SetFreq(freq)
 	}
 	return nil
 }
-func (s *osc) SetFreq(freq float64) {
-	s.freq = freq
+func (o *osc) SetFreq(freq float64) {
+	o.freq = freq
+}
+
+// ----- Filter ----- //
+
+type filter struct {
+	kind  string
+	freq  float64
+	h     []float64
+	lastX []float64
+	lastY []float64
+}
+
+func (f *filter) Process(in []float64, out []float64) {
+	switch f.kind {
+	case "lowpass":
+		length := len(in)
+		N := 10
+		fc := f.freq / sampleRate
+		if len(f.h) == 0 {
+			f.h = make([]float64, N+1)
+			calcFIRLowpass(N, fc, f.h)
+		}
+		for i := 0; i < length; i++ {
+			out[i] = 0
+			for j := 0; j <= N; j++ {
+				var x float64
+				if i-j >= 0 {
+					x = in[i-j]
+				} else {
+					x = f.lastX[N+i-j]
+				}
+				out[i] += x * f.h[j]
+			}
+		}
+		copy(f.lastX, in[length-N:])
+		copy(f.lastY, out[length-N:])
+	default:
+		copy(out, in)
+	}
+}
+func calcFIRLowpass(N int, fc float64, h []float64) {
+	if N%2 != 0 {
+		log.Panicf("N should be even")
+	}
+	if len(h) != N+1 {
+		log.Panicf("length of h must be N + 1")
+	}
+	wc := 2 * math.Pi * fc
+	for i := 0; i <= N; i++ {
+		h[i] = 2 * fc * sinc(wc*float64(i-N/2))
+	}
+}
+func sinc(x float64) float64 {
+	if math.Abs(x) < 0.000000001 {
+		return 1
+	}
+	return math.Sin(x) / x
+}
+
+func (f *filter) Set(key string, value string) error {
+	switch key {
+	case "kind":
+		f.kind = value
+		f.h = nil
+	case "freq":
+		freq, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.SetFreq(freq)
+		f.h = nil
+	}
+	return nil
+}
+func (f *filter) SetFreq(freq float64) {
+	f.freq = freq
 }
 
 // ----- Audio ----- //
@@ -94,8 +170,10 @@ var _ io.Reader = (*Audio)(nil)
 
 type state struct {
 	osc       *osc
+	filter    *filter
 	gain      float64
 	pos       int64
+	oscOut    []float64 // length: samplesPerCycle
 	out       []float64 // length: fftSize
 	fftResult []float64 // length: fftSize
 }
@@ -108,10 +186,12 @@ func (a *Audio) Read(buf []byte) (int, error) {
 	case state := <-a.stateCh:
 		defer func() { a.stateCh <- state }()
 		sampleLength := int64(len(buf) / bytesPerSample)
-		offset := state.pos % fftSize
 		for i := int64(0); i < sampleLength; i++ {
-			state.out[offset+i] = state.osc.Calc(state.pos+i) * state.gain
+			state.oscOut[i] = state.osc.Calc(state.pos+i) * state.gain
 		}
+		offset := state.pos % fftSize
+		out := state.out[offset : offset+sampleLength]
+		state.filter.Process(state.oscOut, out)
 		writeBuffer(state.out, offset, buf, 0)
 		writeBuffer(state.out, offset, buf, 1)
 		state.pos += sampleLength
@@ -146,9 +226,11 @@ func NewAudio() (*Audio, error) {
 	commandCh := make(chan []string, 256)
 	stateCh := make(chan *state, 1)
 	stateCh <- &state{
-		osc:       &osc{freq: 442, kind: "sine"},
+		osc:       &osc{kind: "sine", freq: 442},
+		filter:    &filter{kind: "lowpass", freq: 1000, lastX: make([]float64, 10), lastY: make([]float64, 10)},
 		gain:      0,
 		pos:       0,
+		oscOut:    make([]float64, samplesPerCycle),
 		out:       make([]float64, fftSize),
 		fftResult: make([]float64, fftSize),
 	}
