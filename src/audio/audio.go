@@ -85,6 +85,7 @@ func (o *osc) SetFreq(freq float64) {
 type filter struct {
 	kind  string
 	freq  float64
+	N     int
 	h     []float64
 	lastX []float64
 	lastY []float64
@@ -92,20 +93,26 @@ type filter struct {
 
 func (f *filter) Process(in []float64, out []float64) {
 	length := len(in)
-	N := 10
+	if len(f.lastX) == 0 {
+		f.lastX = make([]float64, f.N)
+	}
+	if len(f.lastY) == 0 {
+		f.lastY = make([]float64, f.N)
+	}
 	fc := f.freq / sampleRate
 	switch f.kind {
 	case "lowpass":
 		if len(f.h) == 0 {
-			f.h = make([]float64, N+1)
-			calcFIRLowpass(N, fc, f.h)
+			f.h = make([]float64, f.N+1)
+			calcFIRLowpass(f.N, fc, f.h)
 		}
 	case "highpass":
 		if len(f.h) == 0 {
-			f.h = make([]float64, N+1)
-			calcFIRLowpass(N, fc, f.h)
+			Nf := float64(f.N)
+			f.h = make([]float64, f.N+1)
+			calcFIRLowpass(f.N, fc, f.h)
 			for i := 0; i < len(f.h); i++ {
-				f.h[i] = sinc(math.Pi*float64(i)) - f.h[i]
+				f.h[i] = sinc(math.Pi*(float64(i)*(Nf+1)/Nf-Nf/2)) - f.h[i]
 			}
 		}
 	default:
@@ -114,18 +121,18 @@ func (f *filter) Process(in []float64, out []float64) {
 	}
 	for i := 0; i < length; i++ {
 		out[i] = 0
-		for j := 0; j <= N; j++ {
+		for j := 0; j <= f.N; j++ {
 			var x float64
 			if i-j >= 0 {
 				x = in[i-j]
 			} else {
-				x = f.lastX[N+i-j]
+				x = f.lastX[f.N+i-j]
 			}
 			out[i] += x * f.h[j]
 		}
 	}
-	copy(f.lastX, in[length-N:])
-	copy(f.lastY, out[length-N:])
+	copy(f.lastX, in[length-f.N:])
+	copy(f.lastY, out[length-f.N:])
 }
 func calcFIRLowpass(N int, fc float64, h []float64) {
 	if N%2 != 0 {
@@ -138,6 +145,7 @@ func calcFIRLowpass(N int, fc float64, h []float64) {
 	for i := 0; i <= N; i++ {
 		h[i] = 2 * fc * sinc(wc*float64(i-N/2))
 	}
+	Hamming(h)
 }
 func sinc(x float64) float64 {
 	if math.Abs(x) < 0.000000001 {
@@ -236,7 +244,7 @@ func NewAudio() (*Audio, error) {
 	stateCh := make(chan *state, 1)
 	stateCh <- &state{
 		osc:       &osc{kind: "sine", freq: 442},
-		filter:    &filter{kind: "none", freq: 1000, lastX: make([]float64, 10), lastY: make([]float64, 10)},
+		filter:    &filter{kind: "none", freq: 1000, N: 10},
 		gain:      0,
 		pos:       0,
 		oscOut:    make([]float64, samplesPerCycle),

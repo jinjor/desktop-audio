@@ -48,7 +48,7 @@ func makeWTable(n int) []complex128 {
 func (fft *FFT) Calc(x []complex128) {
 	n := len(x)
 	if n != len(fft.bitReverseTable) {
-		log.Fatalf("length should be %v", len(fft.bitReverseTable))
+		log.Panicf("length should be %v", len(fft.bitReverseTable))
 	}
 	for i := 0; i < n; i++ {
 		rev := fft.bitReverseTable[i]
