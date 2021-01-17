@@ -27,7 +27,9 @@ const FilterSelect: React.FC = () => {
   };
   return (
     <select onChange={onChange}>
+      <option>none</option>
       <option>lowpass</option>
+      <option>highpass</option>
     </select>
   );
 };

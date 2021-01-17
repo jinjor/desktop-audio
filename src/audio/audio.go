@@ -91,32 +91,41 @@ type filter struct {
 }
 
 func (f *filter) Process(in []float64, out []float64) {
+	length := len(in)
+	N := 10
+	fc := f.freq / sampleRate
 	switch f.kind {
 	case "lowpass":
-		length := len(in)
-		N := 10
-		fc := f.freq / sampleRate
 		if len(f.h) == 0 {
 			f.h = make([]float64, N+1)
 			calcFIRLowpass(N, fc, f.h)
 		}
-		for i := 0; i < length; i++ {
-			out[i] = 0
-			for j := 0; j <= N; j++ {
-				var x float64
-				if i-j >= 0 {
-					x = in[i-j]
-				} else {
-					x = f.lastX[N+i-j]
-				}
-				out[i] += x * f.h[j]
+	case "highpass":
+		if len(f.h) == 0 {
+			f.h = make([]float64, N+1)
+			calcFIRLowpass(N, fc, f.h)
+			for i := 0; i < len(f.h); i++ {
+				f.h[i] = sinc(math.Pi*float64(i)) - f.h[i]
 			}
 		}
-		copy(f.lastX, in[length-N:])
-		copy(f.lastY, out[length-N:])
 	default:
 		copy(out, in)
+		return
 	}
+	for i := 0; i < length; i++ {
+		out[i] = 0
+		for j := 0; j <= N; j++ {
+			var x float64
+			if i-j >= 0 {
+				x = in[i-j]
+			} else {
+				x = f.lastX[N+i-j]
+			}
+			out[i] += x * f.h[j]
+		}
+	}
+	copy(f.lastX, in[length-N:])
+	copy(f.lastY, out[length-N:])
 }
 func calcFIRLowpass(N int, fc float64, h []float64) {
 	if N%2 != 0 {
@@ -227,7 +236,7 @@ func NewAudio() (*Audio, error) {
 	stateCh := make(chan *state, 1)
 	stateCh <- &state{
 		osc:       &osc{kind: "sine", freq: 442},
-		filter:    &filter{kind: "lowpass", freq: 1000, lastX: make([]float64, 10), lastY: make([]float64, 10)},
+		filter:    &filter{kind: "none", freq: 1000, lastX: make([]float64, 10), lastY: make([]float64, 10)},
 		gain:      0,
 		pos:       0,
 		oscOut:    make([]float64, samplesPerCycle),
