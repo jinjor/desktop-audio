@@ -103,17 +103,11 @@ func (f *filter) Process(in []float64, out []float64) {
 	switch f.kind {
 	case "lowpass":
 		if len(f.h) == 0 {
-			f.h = make([]float64, f.N+1)
-			calcFIRLowpass(f.N, fc, f.h)
+			f.h = makeLowpassH(f.N, fc, Hamming)
 		}
 	case "highpass":
 		if len(f.h) == 0 {
-			Nf := float64(f.N)
-			f.h = make([]float64, f.N+1)
-			calcFIRLowpass(f.N, fc, f.h)
-			for i := 0; i < len(f.h); i++ {
-				f.h[i] = sinc(math.Pi*(float64(i)*(Nf+1)/Nf-Nf/2)) - f.h[i]
-			}
+			f.h = makeHighpassH(f.N, fc, Hamming)
 		}
 	default:
 		copy(out, in)
@@ -134,19 +128,33 @@ func (f *filter) Process(in []float64, out []float64) {
 	copy(f.lastX, in[length-f.N:])
 	copy(f.lastY, out[length-f.N:])
 }
-func calcFIRLowpass(N int, fc float64, h []float64) {
+
+func makeLowpassH(N int, fc float64, windowFunc func(float64) float64) []float64 {
+	h := make([]float64, N+1)
 	if N%2 != 0 {
 		log.Panicf("N should be even")
 	}
-	if len(h) != N+1 {
-		log.Panicf("length of h must be N + 1")
-	}
-	wc := 2 * math.Pi * fc
 	for i := 0; i <= N; i++ {
-		h[i] = 2 * fc * sinc(wc*float64(i-N/2))
+		n := float64(i - N/2)
+		h[i] = 2 * fc * sinc(2*math.Pi*fc*n)
 	}
-	Hamming(h)
+	ApplyWindow(h, windowFunc)
+	return h
 }
+
+func makeHighpassH(N int, fc float64, windowFunc func(float64) float64) []float64 {
+	h := make([]float64, N+1)
+	if N%2 != 0 {
+		log.Panicf("N should be even")
+	}
+	for i := 0; i <= N; i++ {
+		n := float64(i - N/2)
+		h[i] = sinc(math.Pi*n) - 2*fc*sinc(2*math.Pi*fc*n)
+	}
+	ApplyWindow(h, windowFunc)
+	return h
+}
+
 func sinc(x float64) float64 {
 	if math.Abs(x) < 0.000000001 {
 		return 1
@@ -344,7 +352,7 @@ func (a *Audio) GetFFT(ctx context.Context) []float64 {
 		offset := state.pos % fftSize
 		copy(state.fftResult, state.out[offset:])
 		copy(state.fftResult[fftSize-offset:], state.out[:offset])
-		Han(state.fftResult)
+		ApplyWindow(state.fftResult, Han)
 		fft.CalcAbs(state.fftResult)
 		for i, value := range state.fftResult {
 			state.fftResult[i] = value * 2 / fftSize
