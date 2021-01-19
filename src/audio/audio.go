@@ -85,6 +85,8 @@ func (o *osc) SetFreq(freq float64) {
 type filter struct {
 	kind string
 	freq float64
+	q    float64
+	gain float64
 	N    int
 	a    []float64 // feedforward
 	b    []float64 // feedback
@@ -100,14 +102,15 @@ func (f *filter) Process(in []float64, out []float64) {
 			f.past = make([]float64, f.N)
 		}
 		if len(f.a) == 0 || len(f.b) == 0 {
-			f.a, f.b = makeLowpassH(f.N, fc, Hamming)
+			// f.a, f.b = makeFIRLowpassH(f.N, fc, Hamming)
+			f.a, f.b = makeBiquadLowpassH(fc, f.q)
 		}
 	case "highpass":
 		if len(f.past) == 0 {
 			f.past = make([]float64, f.N)
 		}
 		if len(f.a) == 0 || len(f.b) == 0 {
-			f.a, f.b = makeHighpassH(f.N, fc, Hamming)
+			f.a, f.b = makeFIRHighpassH(f.N, fc, Hamming)
 		}
 	default:
 		copy(out, in)
@@ -135,30 +138,45 @@ func (f *filter) Process(in []float64, out []float64) {
 	}
 }
 
-func makeLowpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
-	h := make([]float64, N+1)
+func makeFIRLowpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
+	w0 := 2 * math.Pi * fc
 	if N%2 != 0 {
 		log.Panicf("N should be even")
 	}
+	h := make([]float64, N+1)
 	for i := 0; i <= N; i++ {
 		n := float64(i - N/2)
-		h[i] = 2 * fc * sinc(2*math.Pi*fc*n)
+		h[i] = 2 * fc * sinc(w0*n)
 	}
 	ApplyWindow(h, windowFunc)
 	return h, []float64{}
 }
 
-func makeHighpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
-	h := make([]float64, N+1)
+func makeFIRHighpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
+	w0 := 2 * math.Pi * fc
 	if N%2 != 0 {
 		log.Panicf("N should be even")
 	}
+	h := make([]float64, N+1)
 	for i := 0; i <= N; i++ {
 		n := float64(i - N/2)
-		h[i] = sinc(math.Pi*n) - 2*fc*sinc(2*math.Pi*fc*n)
+		h[i] = sinc(math.Pi*n) - 2*fc*sinc(w0*n)
 	}
 	ApplyWindow(h, windowFunc)
 	return h, []float64{}
+}
+
+func makeBiquadLowpassH(fc float64, q float64) ([]float64, []float64) {
+	// from RBJ's cookbook
+	w0 := 2 * math.Pi * fc
+	alpha := math.Sin(w0) / (2 * q)
+	b0 := (1 - math.Cos(w0)) / 2
+	b1 := (1 - math.Cos(w0))
+	b2 := (1 - math.Cos(w0)) / 2
+	a0 := 1 + alpha
+	a1 := -2 * math.Cos(w0)
+	a2 := 1 - alpha
+	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
 }
 
 func sinc(x float64) float64 {
@@ -180,15 +198,30 @@ func (f *filter) Set(key string, value string) error {
 		if err != nil {
 			return err
 		}
-		f.SetFreq(freq)
+		f.freq = freq
+		f.past = nil
+		f.a = nil
+		f.b = nil
+	case "q":
+		q, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.q = q
+		f.past = nil
+		f.a = nil
+		f.b = nil
+	case "gain":
+		gain, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.gain = gain
 		f.past = nil
 		f.a = nil
 		f.b = nil
 	}
 	return nil
-}
-func (f *filter) SetFreq(freq float64) {
-	f.freq = freq
 }
 
 // ----- Audio ----- //
@@ -262,7 +295,7 @@ func NewAudio() (*Audio, error) {
 	stateCh := make(chan *state, 1)
 	stateCh <- &state{
 		osc:       &osc{kind: "sine", freq: 442},
-		filter:    &filter{kind: "none", freq: 1000, N: 10},
+		filter:    &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 10},
 		gain:      0,
 		pos:       0,
 		oscOut:    make([]float64, samplesPerCycle),

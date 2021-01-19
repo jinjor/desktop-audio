@@ -41,6 +41,13 @@ const FilterFreq: React.FC = () => {
   };
   return <input onInput={onInput} type="range" min="30" max="20000" />;
 };
+const FilterQ: React.FC = () => {
+  const onInput = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "filter", "q", value]);
+  };
+  return <input onInput={onInput} type="range" min="0.1" max="20" />;
+};
 
 const Spectrum = () => {
   const canvasEl: React.MutableRefObject<HTMLCanvasElement | null> = useRef(
@@ -107,6 +114,7 @@ const App = () => {
       <WaveSelect></WaveSelect>
       <FilterSelect></FilterSelect>
       <FilterFreq></FilterFreq>
+      <FilterQ></FilterQ>
       <Notes></Notes>
       <pre>{result}</pre>
       <Spectrum />
