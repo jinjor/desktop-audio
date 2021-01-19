@@ -83,53 +83,59 @@ func (o *osc) SetFreq(freq float64) {
 // ----- Filter ----- //
 
 type filter struct {
-	kind  string
-	freq  float64
-	N     int
-	h     []float64
-	lastX []float64
-	lastY []float64
+	kind string
+	freq float64
+	N    int
+	a    []float64 // feedforward
+	b    []float64 // feedback
+	past []float64
 }
 
 func (f *filter) Process(in []float64, out []float64) {
 	length := len(in)
-	if len(f.lastX) == 0 {
-		f.lastX = make([]float64, f.N)
-	}
-	if len(f.lastY) == 0 {
-		f.lastY = make([]float64, f.N)
-	}
 	fc := f.freq / sampleRate
 	switch f.kind {
 	case "lowpass":
-		if len(f.h) == 0 {
-			f.h = makeLowpassH(f.N, fc, Hamming)
+		if len(f.past) == 0 {
+			f.past = make([]float64, f.N)
+		}
+		if len(f.a) == 0 || len(f.b) == 0 {
+			f.a, f.b = makeLowpassH(f.N, fc, Hamming)
 		}
 	case "highpass":
-		if len(f.h) == 0 {
-			f.h = makeHighpassH(f.N, fc, Hamming)
+		if len(f.past) == 0 {
+			f.past = make([]float64, f.N)
+		}
+		if len(f.a) == 0 || len(f.b) == 0 {
+			f.a, f.b = makeHighpassH(f.N, fc, Hamming)
 		}
 	default:
 		copy(out, in)
 		return
 	}
 	for i := 0; i < length; i++ {
-		out[i] = 0
-		for j := 0; j <= f.N; j++ {
-			var x float64
-			if i-j >= 0 {
-				x = in[i-j]
-			} else {
-				x = f.lastX[f.N+i-j]
-			}
-			out[i] += x * f.h[j]
+		// get input
+		tmp := in[i]
+		// apply f.b
+		for j := 0; j < len(f.b); j++ {
+			tmp -= f.past[j] * f.b[j]
 		}
+		// apply f.a
+		o := tmp * f.a[0]
+		for j := 1; j < len(f.a); j++ {
+			o += f.past[j-1] * f.a[j]
+		}
+		// unshift f.past
+		for j := len(f.past) - 2; j >= 0; j-- {
+			f.past[j+1] = f.past[j]
+		}
+		f.past[0] = tmp
+		// set output
+		out[i] = o
 	}
-	copy(f.lastX, in[length-f.N:])
-	copy(f.lastY, out[length-f.N:])
 }
 
-func makeLowpassH(N int, fc float64, windowFunc func(float64) float64) []float64 {
+func makeLowpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
 	h := make([]float64, N+1)
 	if N%2 != 0 {
 		log.Panicf("N should be even")
@@ -139,10 +145,10 @@ func makeLowpassH(N int, fc float64, windowFunc func(float64) float64) []float64
 		h[i] = 2 * fc * sinc(2*math.Pi*fc*n)
 	}
 	ApplyWindow(h, windowFunc)
-	return h
+	return h, []float64{}
 }
 
-func makeHighpassH(N int, fc float64, windowFunc func(float64) float64) []float64 {
+func makeHighpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
 	h := make([]float64, N+1)
 	if N%2 != 0 {
 		log.Panicf("N should be even")
@@ -152,7 +158,7 @@ func makeHighpassH(N int, fc float64, windowFunc func(float64) float64) []float6
 		h[i] = sinc(math.Pi*n) - 2*fc*sinc(2*math.Pi*fc*n)
 	}
 	ApplyWindow(h, windowFunc)
-	return h
+	return h, []float64{}
 }
 
 func sinc(x float64) float64 {
@@ -166,14 +172,18 @@ func (f *filter) Set(key string, value string) error {
 	switch key {
 	case "kind":
 		f.kind = value
-		f.h = nil
+		f.past = nil
+		f.a = nil
+		f.b = nil
 	case "freq":
 		freq, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
 		f.SetFreq(freq)
-		f.h = nil
+		f.past = nil
+		f.a = nil
+		f.b = nil
 	}
 	return nil
 }
