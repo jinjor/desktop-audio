@@ -9,6 +9,7 @@ import (
 	"math/cmplx"
 	"math/rand"
 	"strconv"
+	"sync"
 
 	"github.com/hajimehoshi/oto"
 )
@@ -367,14 +368,43 @@ type Audio struct {
 	ctx        context.Context
 	otoContext *oto.Context
 	CommandCh  chan []string
-	stateCh    chan *state
-	ChangeCh   chan string
+	state      *state
+	Changes    *Changes
 	fftResult  []float64 // length: fftSize
 }
 
 var _ io.Reader = (*Audio)(nil)
 
+// Changes ...
+type Changes struct {
+	sync.Mutex
+	dict map[string]struct{}
+}
+
+// Add ...
+func (c *Changes) Add(key string) {
+	c.Lock()
+	c.dict[key] = struct{}{}
+	c.Unlock()
+}
+
+// Has ...
+func (c *Changes) Has(key string) bool {
+	c.Lock()
+	_, ok := c.dict[key]
+	c.Unlock()
+	return ok
+}
+
+// Delete ...
+func (c *Changes) Delete(key string) {
+	c.Lock()
+	delete(c.dict, key)
+	c.Unlock()
+}
+
 type state struct {
+	sync.Mutex
 	osc    *osc
 	filter *filter
 	gain   float64
@@ -388,18 +418,19 @@ func (a *Audio) Read(buf []byte) (int, error) {
 	case <-a.ctx.Done():
 		log.Println("Read() interrupted.")
 		return 0, io.EOF
-	case state := <-a.stateCh:
-		defer func() { a.stateCh <- state }()
+	default:
+		a.state.Lock()
+		defer a.state.Unlock()
 		sampleLength := int64(len(buf) / bytesPerSample)
 		for i := int64(0); i < sampleLength; i++ {
-			state.oscOut[i] = state.osc.Calc(state.pos+i) * state.gain
+			a.state.oscOut[i] = a.state.osc.Calc(a.state.pos+i) * a.state.gain
 		}
-		offset := state.pos % fftSize
-		out := state.out[offset : offset+sampleLength]
-		state.filter.Process(state.oscOut, out)
-		writeBuffer(state.out, offset, buf, 0)
-		writeBuffer(state.out, offset, buf, 1)
-		state.pos += sampleLength
+		offset := a.state.pos % fftSize
+		out := a.state.out[offset : offset+sampleLength]
+		a.state.filter.Process(a.state.oscOut, out)
+		writeBuffer(a.state.out, offset, buf, 0)
+		writeBuffer(a.state.out, offset, buf, 1)
+		a.state.pos += sampleLength
 		return len(buf), nil // io.EOF, etc.
 	}
 }
@@ -429,23 +460,22 @@ func NewAudio() (*Audio, error) {
 		return nil, err
 	}
 	commandCh := make(chan []string, 256)
-	stateCh := make(chan *state, 1)
-	changeCh := make(chan string, 256)
-	stateCh <- &state{
-		osc:    &osc{kind: "sine", freq: 442},
-		filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 10},
-		gain:   0,
-		pos:    0,
-		oscOut: make([]float64, samplesPerCycle),
-		out:    make([]float64, fftSize),
-	}
 	audio := &Audio{
 		ctx:        context.Background(),
 		otoContext: otoContext,
 		CommandCh:  commandCh,
-		stateCh:    stateCh,
-		ChangeCh:   changeCh,
-		fftResult:  make([]float64, fftSize),
+		state: &state{
+			osc:    &osc{kind: "sine", freq: 442},
+			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 10},
+			gain:   0,
+			pos:    0,
+			oscOut: make([]float64, samplesPerCycle),
+			out:    make([]float64, fftSize),
+		},
+		Changes: &Changes{
+			dict: make(map[string]struct{}),
+		},
+		fftResult: make([]float64, fftSize),
 	}
 	go processCommands(audio, commandCh)
 	return audio, nil
@@ -459,8 +489,8 @@ func processCommands(audio *Audio, commandCh <-chan []string) {
 }
 
 func (a *Audio) update(command []string) {
-	state := <-a.stateCh
-	defer func() { a.stateCh <- state }()
+	a.state.Lock()
+	defer a.state.Unlock()
 
 	switch command[0] {
 	case "set":
@@ -471,24 +501,24 @@ func (a *Audio) update(command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			state.osc.Set(command[0], command[1])
+			a.state.osc.Set(command[0], command[1])
 		case "filter":
 			command = command[1:]
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			state.filter.Set(command[0], command[1])
-			a.ChangeCh <- "filter-shape"
+			a.state.filter.Set(command[0], command[1])
+			a.Changes.Add("filter-shape")
 		}
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
 			panic(err)
 		}
-		state.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
-		state.gain = 0.3
+		a.state.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
+		a.state.gain = 0.3
 	case "note_off":
-		state.gain = 0
+		a.state.gain = 0
 	default:
 		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
@@ -498,8 +528,6 @@ func (a *Audio) update(command []string) {
 func (a *Audio) Close() error {
 	log.Println("Closing Audio...")
 	close(a.CommandCh)
-	close(a.stateCh)
-	close(a.ChangeCh)
 	return a.otoContext.Close()
 }
 
@@ -522,38 +550,28 @@ func (a *Audio) Start(ctx context.Context) error {
 }
 
 // GetFilterShape ...
-func (a *Audio) GetFilterShape(ctx context.Context) []float64 {
-	select {
-	case <-ctx.Done():
-		log.Println("GetFilterShape() interrupted.")
-		return nil
-	case state := <-a.stateCh:
-		_a, b := getH(state.filter)
-		a.stateCh <- state
-		return frequencyResponse(_a, b, 2048, 64)
-	}
+func (a *Audio) GetFilterShape() []float64 {
+	a.state.Lock()
+	_a, b := getH(a.state.filter)
+	a.state.Unlock()
+	return frequencyResponse(_a, b, 512, 128)
 }
 
 // GetFFT ...
-func (a *Audio) GetFFT(ctx context.Context) []float64 {
-	select {
-	case <-ctx.Done():
-		log.Println("GetFFT() interrupted.")
-		return nil
-	case state := <-a.stateCh:
-		// out:       | 4 | 1 | 2 | 3 |
-		// offset:        ^
-		// fftResult: | 1 | 2 | 3 | 4 |
-		// return:    |<----->|
-		offset := state.pos % fftSize
-		copy(a.fftResult, state.out[offset:])
-		copy(a.fftResult[fftSize-offset:], state.out[:offset])
-		a.stateCh <- state
-		ApplyWindow(a.fftResult, Han)
-		fft.CalcAbs(a.fftResult)
-		for i, value := range a.fftResult {
-			a.fftResult[i] = value * 2 / fftSize
-		}
-		return a.fftResult[:fftSize/2]
+func (a *Audio) GetFFT() []float64 {
+	a.state.Lock()
+	// out:       | 4 | 1 | 2 | 3 |
+	// offset:        ^
+	// fftResult: | 1 | 2 | 3 | 4 |
+	// return:    |<----->|
+	offset := a.state.pos % fftSize
+	copy(a.fftResult, a.state.out[offset:])
+	copy(a.fftResult[fftSize-offset:], a.state.out[:offset])
+	a.state.Unlock()
+	ApplyWindow(a.fftResult, Han)
+	fft.CalcAbs(a.fftResult)
+	for i, value := range a.fftResult {
+		a.fftResult[i] = value * 2 / fftSize
 	}
+	return a.fftResult[:fftSize/2]
 }

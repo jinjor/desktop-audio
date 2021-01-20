@@ -19,7 +19,17 @@ createMenu();
     console.log(e.message);
     process.exit(1);
   };
+
+  let sent = 0;
+  let received = 0;
+  setInterval(() => {
+    console.log(`sent: ${sent} \treceived: ${received}`);
+    sent = 0;
+    received = 0;
+  }, 1000);
+
   audioClient.onMessage = (message) => {
+    received++;
     // console.log("got message from audio", message);
     win!.webContents.send("audio", message);
   };
@@ -27,6 +37,7 @@ createMenu();
 
   // set up IPC
   ipcMain.on("audio", (_, command: string[]) => {
+    sent++;
     // console.log("got message from web", command);
     audioClient.send(command);
   });

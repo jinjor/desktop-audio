@@ -59,9 +59,6 @@ func main() {
 		g.Go(func() error {
 			return sendReports(ctx, conn, audio)
 		})
-		g.Go(func() error {
-			return continuouslyRequestFFT(ctx, conn, audio)
-		})
 		return g.Wait()
 	})
 	if err != nil {
@@ -145,16 +142,19 @@ func parseCommand(line string) ([]string, error) {
 }
 
 func sendReports(ctx context.Context, conn net.Conn, audio *audio.Audio) error {
+	t := time.NewTicker(time.Second / 60)
+	defer t.Stop()
 loop:
 	for {
+		audio.Changes.Add("fft") // always exists
 		select {
 		case <-ctx.Done():
 			log.Println("sendReports() interrupted")
 			break loop
-		case change := <-audio.ChangeCh:
-			switch change {
-			case "fft":
-				result := audio.GetFFT(ctx)
+		case _ = <-t.C:
+			if audio.Changes.Has("fft") {
+				audio.Changes.Delete("fft")
+				result := audio.GetFFT()
 				if result == nil {
 					continue
 				}
@@ -169,8 +169,10 @@ loop:
 				default:
 					conn.Write([]byte(s + "\n"))
 				}
-			case "filter-shape":
-				result := audio.GetFilterShape(ctx)
+			}
+			if audio.Changes.Has("filter-shape") {
+				audio.Changes.Delete("filter-shape")
+				result := audio.GetFilterShape()
 				if result == nil {
 					continue
 				}
@@ -189,21 +191,5 @@ loop:
 		}
 	}
 	log.Println("sendReports() ended.")
-	return nil
-}
-func continuouslyRequestFFT(ctx context.Context, conn net.Conn, audio *audio.Audio) error {
-	t := time.NewTicker(time.Second / 60)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("continuouslyRequestFFT() interrupted")
-			break loop
-		case _ = <-t.C:
-			audio.ChangeCh <- "fft"
-		}
-	}
-	log.Println("continuouslyRequestFFT() ended.")
 	return nil
 }

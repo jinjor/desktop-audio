@@ -156,8 +156,8 @@ const FilterShape = () => {
         const sampleRate = 48000;
         const maxFreq = 24000;
         const minFreq = 32;
-        const maxDb = 20;
-        const minDb = -20;
+        const maxDb = 50;
+        const minDb = -50;
 
         const ctx = canvas.getContext("2d")!;
         ctx.fillStyle = "black";
@@ -166,12 +166,15 @@ const FilterShape = () => {
         ctx.strokeStyle = "pink";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(0, height);
+        ctx.moveTo(0, height / 2);
         for (let i = 0; i < samples; i++) {
           const value = parseFloat(command[i + 1]);
           const freq = (sampleRate / 2) * (i / samples);
           const x =
             (Math.log(freq / minFreq) / Math.log(maxFreq / minFreq)) * width;
+          if (i <= 1) {
+            console.log(i, freq, x);
+          }
           const db = 20 * Math.log10(value);
           const y = (1 - (db - minDb) / (maxDb - minDb)) * height;
           ctx.lineTo(x, y);
