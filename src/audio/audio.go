@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/cmplx"
 	"math/rand"
 	"strconv"
 
@@ -94,49 +95,76 @@ type filter struct {
 }
 
 func (f *filter) Process(in []float64, out []float64) {
-	length := len(in)
+	if len(f.a) == 0 {
+		f.a, f.b = getH(f)
+		f.past = make([]float64, int(math.Max(float64(len(f.a)-1), float64(len(f.b)))))
+	}
+	process(in, out, f.a, f.b, f.past)
+}
+
+func getH(f *filter) ([]float64, []float64) {
 	fc := f.freq / sampleRate
 	switch f.kind {
 	case "lowpass":
-		if len(f.past) == 0 {
-			f.past = make([]float64, f.N)
-		}
-		if len(f.a) == 0 || len(f.b) == 0 {
-			// f.a, f.b = makeFIRLowpassH(f.N, fc, Hamming)
-			f.a, f.b = makeBiquadLowpassH(fc, f.q)
-		}
+		return makeBiquadLowpassH(fc, f.q)
 	case "highpass":
-		if len(f.past) == 0 {
-			f.past = make([]float64, f.N)
-		}
-		if len(f.a) == 0 || len(f.b) == 0 {
-			// f.a, f.b = makeFIRHighpassH(f.N, fc, Hamming)
-			f.a, f.b = makeBiquadHighpassH(fc, f.q)
-		}
+		return makeBiquadHighpassH(fc, f.q)
 	default:
-		copy(out, in)
-		return
+		return makeNoFilterH()
 	}
-	for i := 0; i < length; i++ {
+}
+
+func process(in []float64, out []float64, a []float64, b []float64, past []float64) {
+	for i := 0; i < len(in); i++ {
 		// get input
 		tmp := in[i]
-		// apply f.b
-		for j := 0; j < len(f.b); j++ {
-			tmp -= f.past[j] * f.b[j]
+		// apply b
+		for j := 0; j < len(b); j++ {
+			tmp -= past[j] * b[j]
 		}
-		// apply f.a
-		o := tmp * f.a[0]
-		for j := 1; j < len(f.a); j++ {
-			o += f.past[j-1] * f.a[j]
+		// apply a
+		o := tmp * a[0]
+		for j := 1; j < len(a); j++ {
+			o += past[j-1] * a[j]
 		}
 		// unshift f.past
-		for j := len(f.past) - 2; j >= 0; j-- {
-			f.past[j+1] = f.past[j]
+		for j := len(past) - 2; j >= 0; j-- {
+			past[j+1] = past[j]
 		}
-		f.past[0] = tmp
+		if len(past) > 0 {
+			past[0] = tmp
+		}
 		// set output
 		out[i] = o
 	}
+}
+
+func impulseResponse(a []float64, b []float64, n int) []float64 {
+	in := make([]float64, n)
+	out := make([]float64, n)
+	past := make([]float64, int(math.Max(float64(len(a)-1), float64(len(b)))))
+	in[0] = 1
+	process(in, out, a, b, past)
+	return out
+}
+
+func frequencyResponse(a []float64, b []float64, samples int, plots int) []float64 {
+	h := impulseResponse(a, b, samples)
+	Hw := make([]float64, plots)
+	for i := 0; i < plots; i++ {
+		fc := 0.5 / float64(plots) * float64(i)
+		w := 2.0 * math.Pi * fc
+		sum := complex(0, 0)
+		for j := 0; j < len(h); j++ {
+			sum += complex(h[j], 0) * cmplx.Exp(complex(0, -float64(j)*w))
+		}
+		Hw[i] = cmplx.Abs(sum)
+	}
+	return Hw
+}
+
+func makeNoFilterH() ([]float64, []float64) {
+	return []float64{1}, []float64{}
 }
 
 func makeFIRLowpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
@@ -336,22 +364,23 @@ func (f *filter) Set(key string, value string) error {
 
 // Audio ...
 type Audio struct {
+	ctx        context.Context
 	otoContext *oto.Context
 	CommandCh  chan []string
-	ctx        context.Context
 	stateCh    chan *state
+	ChangeCh   chan string
+	fftResult  []float64 // length: fftSize
 }
 
 var _ io.Reader = (*Audio)(nil)
 
 type state struct {
-	osc       *osc
-	filter    *filter
-	gain      float64
-	pos       int64
-	oscOut    []float64 // length: samplesPerCycle
-	out       []float64 // length: fftSize
-	fftResult []float64 // length: fftSize
+	osc    *osc
+	filter *filter
+	gain   float64
+	pos    int64
+	oscOut []float64 // length: samplesPerCycle
+	out    []float64 // length: fftSize
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -401,20 +430,22 @@ func NewAudio() (*Audio, error) {
 	}
 	commandCh := make(chan []string, 256)
 	stateCh := make(chan *state, 1)
+	changeCh := make(chan string, 256)
 	stateCh <- &state{
-		osc:       &osc{kind: "sine", freq: 442},
-		filter:    &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 10},
-		gain:      0,
-		pos:       0,
-		oscOut:    make([]float64, samplesPerCycle),
-		out:       make([]float64, fftSize),
-		fftResult: make([]float64, fftSize),
+		osc:    &osc{kind: "sine", freq: 442},
+		filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 10},
+		gain:   0,
+		pos:    0,
+		oscOut: make([]float64, samplesPerCycle),
+		out:    make([]float64, fftSize),
 	}
 	audio := &Audio{
+		ctx:        context.Background(),
 		otoContext: otoContext,
 		CommandCh:  commandCh,
-		ctx:        context.Background(),
 		stateCh:    stateCh,
+		ChangeCh:   changeCh,
+		fftResult:  make([]float64, fftSize),
 	}
 	go processCommands(audio, commandCh)
 	return audio, nil
@@ -447,6 +478,7 @@ func (a *Audio) update(command []string) {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
 			state.filter.Set(command[0], command[1])
+			a.ChangeCh <- "filter-shape"
 		}
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
@@ -467,6 +499,7 @@ func (a *Audio) Close() error {
 	log.Println("Closing Audio...")
 	close(a.CommandCh)
 	close(a.stateCh)
+	close(a.ChangeCh)
 	return a.otoContext.Close()
 }
 
@@ -488,6 +521,19 @@ func (a *Audio) Start(ctx context.Context) error {
 	return nil
 }
 
+// GetFilterShape ...
+func (a *Audio) GetFilterShape(ctx context.Context) []float64 {
+	select {
+	case <-ctx.Done():
+		log.Println("GetFilterShape() interrupted.")
+		return nil
+	case state := <-a.stateCh:
+		_a, b := getH(state.filter)
+		a.stateCh <- state
+		return frequencyResponse(_a, b, 2048, 64)
+	}
+}
+
 // GetFFT ...
 func (a *Audio) GetFFT(ctx context.Context) []float64 {
 	select {
@@ -495,19 +541,19 @@ func (a *Audio) GetFFT(ctx context.Context) []float64 {
 		log.Println("GetFFT() interrupted.")
 		return nil
 	case state := <-a.stateCh:
-		defer func() { a.stateCh <- state }()
 		// out:       | 4 | 1 | 2 | 3 |
 		// offset:        ^
 		// fftResult: | 1 | 2 | 3 | 4 |
 		// return:    |<----->|
 		offset := state.pos % fftSize
-		copy(state.fftResult, state.out[offset:])
-		copy(state.fftResult[fftSize-offset:], state.out[:offset])
-		ApplyWindow(state.fftResult, Han)
-		fft.CalcAbs(state.fftResult)
-		for i, value := range state.fftResult {
-			state.fftResult[i] = value * 2 / fftSize
+		copy(a.fftResult, state.out[offset:])
+		copy(a.fftResult[fftSize-offset:], state.out[:offset])
+		a.stateCh <- state
+		ApplyWindow(a.fftResult, Han)
+		fft.CalcAbs(a.fftResult)
+		for i, value := range a.fftResult {
+			a.fftResult[i] = value * 2 / fftSize
 		}
-		return state.fftResult[:fftSize/2]
+		return a.fftResult[:fftSize/2]
 	}
 }

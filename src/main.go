@@ -59,6 +59,9 @@ func main() {
 		g.Go(func() error {
 			return sendReports(ctx, conn, audio)
 		})
+		g.Go(func() error {
+			return continuouslyRequestFFT(ctx, conn, audio)
+		})
 		return g.Wait()
 	})
 	if err != nil {
@@ -142,32 +145,65 @@ func parseCommand(line string) ([]string, error) {
 }
 
 func sendReports(ctx context.Context, conn net.Conn, audio *audio.Audio) error {
-	t := time.NewTicker(time.Second / 60)
-	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("sendReports() interrupted")
 			break loop
-		case _ = <-t.C:
-			result := audio.GetFFT(ctx)
-			if result == nil {
-				continue
-			}
-			s := "fft"
-			for _, value := range result {
-				s += " " + strconv.FormatFloat(value, 'f', 6, 64)
-			}
-			select {
-			case <-ctx.Done():
-				log.Println("sendReports() interrupted")
-				break loop
-			default:
-				conn.Write([]byte(s + "\n"))
+		case change := <-audio.ChangeCh:
+			switch change {
+			case "fft":
+				result := audio.GetFFT(ctx)
+				if result == nil {
+					continue
+				}
+				s := "fft"
+				for _, value := range result {
+					s += " " + strconv.FormatFloat(value, 'f', 6, 64)
+				}
+				select {
+				case <-ctx.Done():
+					log.Println("sendReports() interrupted")
+					break loop
+				default:
+					conn.Write([]byte(s + "\n"))
+				}
+			case "filter-shape":
+				result := audio.GetFilterShape(ctx)
+				if result == nil {
+					continue
+				}
+				s := "filter-shape"
+				for _, value := range result {
+					s += " " + strconv.FormatFloat(value, 'f', 6, 64)
+				}
+				select {
+				case <-ctx.Done():
+					log.Println("sendReports() interrupted")
+					break loop
+				default:
+					conn.Write([]byte(s + "\n"))
+				}
 			}
 		}
 	}
 	log.Println("sendReports() ended.")
+	return nil
+}
+func continuouslyRequestFFT(ctx context.Context, conn net.Conn, audio *audio.Audio) error {
+	t := time.NewTicker(time.Second / 60)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("continuouslyRequestFFT() interrupted")
+			break loop
+		case _ = <-t.C:
+			audio.ChangeCh <- "fft"
+		}
+	}
+	log.Println("continuouslyRequestFFT() ended.")
 	return nil
 }
