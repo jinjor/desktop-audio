@@ -39,14 +39,56 @@ const FilterFreq: React.FC = () => {
     const value = e.target.value;
     ipcRenderer.send("audio", ["set", "filter", "freq", value]);
   };
-  return <input onInput={onInput} type="range" min="30" max="20000" />;
+  return (
+    <label>
+      Freq
+      <input
+        onInput={onInput}
+        type="range"
+        min="30"
+        max="20000"
+        defaultValue="1000"
+      />
+    </label>
+  );
 };
+
 const FilterQ: React.FC = () => {
   const onInput = (e: any) => {
     const value = e.target.value;
     ipcRenderer.send("audio", ["set", "filter", "q", value]);
   };
-  return <input onInput={onInput} type="range" min="0.1" max="20" />;
+  return (
+    <label>
+      Q
+      <input
+        onInput={onInput}
+        type="range"
+        min="0.1"
+        max="20"
+        defaultValue="1"
+      />
+    </label>
+  );
+};
+
+const FilterGain: React.FC = () => {
+  const onInput = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "filter", "gain", value]);
+  };
+  return (
+    <label>
+      Gain
+      <input
+        onInput={onInput}
+        type="range"
+        min="-20"
+        max="20"
+        defaultValue="0"
+      />
+    </label>
+  );
 };
 
 const Spectrum = () => {
@@ -115,6 +157,7 @@ const App = () => {
       <FilterSelect></FilterSelect>
       <FilterFreq></FilterFreq>
       <FilterQ></FilterQ>
+      <FilterGain></FilterGain>
       <Notes></Notes>
       <pre>{result}</pre>
       <Spectrum />
