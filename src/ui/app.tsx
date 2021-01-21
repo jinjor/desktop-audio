@@ -91,104 +91,104 @@ const FilterGain: React.FC = () => {
   );
 };
 
-const Spectrum = () => {
+const Canvas = (props: {
+  listen: (canvas: HTMLCanvasElement) => () => void;
+  [key: string]: any;
+}) => {
+  const { listen, ...canvasProps } = props;
   const canvasEl: React.MutableRefObject<HTMLCanvasElement | null> = useRef(
     null
   );
   useEffect(() => {
+    return listen(canvasEl.current!);
+  }, []);
+  return <canvas {...canvasProps} ref={canvasEl}></canvas>;
+};
+
+const Spectrum = () => {
+  const listen = (canvas: HTMLCanvasElement) => {
+    const width = canvas.width;
+    const height = canvas.height;
+    const sampleRate = 48000;
+    const maxFreq = 24000;
+    const minFreq = 32;
+    const fftData: number[] = [];
+    const filterShapeData: number[] = [];
+    const render = () => {
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, width, height);
+      renderFrequencyShape(ctx, fftData, {
+        color: "#66dd66",
+        sampleRate,
+        width,
+        height,
+        minFreq,
+        maxFreq,
+        minDb: -100,
+        maxDb: -6,
+      });
+      renderFrequencyShape(ctx, filterShapeData, {
+        color: "#66aadd",
+        sampleRate,
+        width,
+        height,
+        minFreq,
+        maxFreq,
+        minDb: -50,
+        maxDb: 50,
+      });
+    };
     const callback = (_: any, command: string[]) => {
       if (command[0] === "fft") {
-        if (canvasEl.current == null) {
-          return;
+        for (let i = 1; i < command.length; i++) {
+          fftData[i - 1] = parseFloat(command[i]);
         }
-        const canvas = canvasEl.current;
-        const width = canvas.width;
-        const height = canvas.height;
-        const samples = command.length - 1;
-        const sampleRate = 48000;
-        const maxFreq = 24000;
-        const minFreq = 32;
-        const maxDb = -6;
-        const minDb = -100;
-
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.strokeStyle = "green";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, height);
-        for (let i = 0; i < samples; i++) {
-          const value = parseFloat(command[i + 1]);
-          const freq = (sampleRate / 2) * (i / samples);
-          const x =
-            (Math.log(freq / minFreq) / Math.log(maxFreq / minFreq)) * width;
-          const db = 20 * Math.log10(value);
-          const y = (1 - (db - minDb) / (maxDb - minDb)) * height;
-          ctx.lineTo(x, y);
+        render();
+      } else if (command[0] === "filter-shape") {
+        for (let i = 1; i < command.length; i++) {
+          filterShapeData[i - 1] = parseFloat(command[i]);
         }
-        ctx.stroke();
+        render();
       }
     };
     ipcRenderer.on("audio", callback);
     return () => {
       ipcRenderer.off("audio", callback);
     };
-  }, []);
-  return <canvas width="512" height="200" ref={canvasEl}></canvas>;
+  };
+  return <Canvas width="512" height="200" listen={listen} />;
 };
 
-const FilterShape = () => {
-  const canvasEl: React.MutableRefObject<HTMLCanvasElement | null> = useRef(
-    null
-  );
-  useEffect(() => {
-    const callback = (_: any, command: string[]) => {
-      if (command[0] === "filter-shape") {
-        if (canvasEl.current == null) {
-          return;
-        }
-        const canvas = canvasEl.current;
-        const width = canvas.width;
-        const height = canvas.height;
-        const samples = command.length - 1;
-        const sampleRate = 48000;
-        const maxFreq = 24000;
-        const minFreq = 32;
-        const maxDb = 50;
-        const minDb = -50;
-
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.strokeStyle = "pink";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, height / 2);
-        for (let i = 0; i < samples; i++) {
-          const value = parseFloat(command[i + 1]);
-          const freq = (sampleRate / 2) * (i / samples);
-          const x =
-            (Math.log(freq / minFreq) / Math.log(maxFreq / minFreq)) * width;
-          if (i <= 1) {
-            console.log(i, freq, x);
-          }
-          const db = 20 * Math.log10(value);
-          const y = (1 - (db - minDb) / (maxDb - minDb)) * height;
-          ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      }
-    };
-    ipcRenderer.on("audio", callback);
-    return () => {
-      ipcRenderer.off("audio", callback);
-    };
-  }, []);
-  return <canvas width="512" height="200" ref={canvasEl}></canvas>;
-};
+function renderFrequencyShape(
+  ctx: CanvasRenderingContext2D,
+  data: number[],
+  o: {
+    color: string;
+    sampleRate: number;
+    width: number;
+    height: number;
+    minFreq: number;
+    maxFreq: number;
+    minDb: number;
+    maxDb: number;
+  }
+) {
+  ctx.strokeStyle = o.color;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, o.height);
+  for (let i = 0; i < data.length; i++) {
+    const value = data[i];
+    const freq = (o.sampleRate / 2) * (i / data.length);
+    const x =
+      (Math.log(freq / o.minFreq) / Math.log(o.maxFreq / o.minFreq)) * o.width;
+    const db = 20 * Math.log10(value);
+    const y = (1 - (db - o.minDb) / (o.maxDb - o.minDb)) * o.height;
+    ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
 
 const App = () => {
   const [result, setResult] = useState("");
@@ -212,7 +212,6 @@ const App = () => {
       <Notes></Notes>
       <pre>{result}</pre>
       <Spectrum />
-      <FilterShape />
     </React.Fragment>
   );
 };
