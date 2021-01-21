@@ -28,8 +28,16 @@ const FilterSelect: React.FC = () => {
   return (
     <select onChange={onChange}>
       <option>none</option>
+      <option>lowpass-fir</option>
+      <option>highpass-fir</option>
       <option>lowpass</option>
       <option>highpass</option>
+      <option>bandpass-1</option>
+      <option>bandpass-2</option>
+      <option>notch</option>
+      <option>peaking</option>
+      <option>lowshelf</option>
+      <option>highshelf</option>
     </select>
   );
 };
@@ -83,8 +91,8 @@ const FilterGain: React.FC = () => {
       <input
         onInput={onInput}
         type="range"
-        min="-20"
-        max="20"
+        min="-40"
+        max="40"
         defaultValue="0"
       />
     </label>
@@ -191,7 +199,7 @@ function renderFrequencyShape(
 }
 
 const App = () => {
-  const [result, setResult] = useState("");
+  const [, setResult] = useState("");
   useEffect(() => {
     const callback = (_: any, command: string[]) => {
       setResult(JSON.stringify(command));
@@ -210,7 +218,6 @@ const App = () => {
       <FilterQ></FilterQ>
       <FilterGain></FilterGain>
       <Notes></Notes>
-      <pre>{result}</pre>
       <Spectrum />
     </React.Fragment>
   );

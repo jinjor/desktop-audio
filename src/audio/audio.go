@@ -105,10 +105,28 @@ func (f *filter) Process(in []float64, out []float64) {
 func getH(f *filter) ([]float64, []float64) {
 	fc := f.freq / sampleRate
 	switch f.kind {
+	case "lowpass-fir":
+		return makeFIRLowpassH(f.N, fc, Hamming)
+	case "highpass-fir":
+		return makeFIRHighpassH(f.N, fc, Hamming)
 	case "lowpass":
 		return makeBiquadLowpassH(fc, f.q)
 	case "highpass":
 		return makeBiquadHighpassH(fc, f.q)
+	case "bandpass-1":
+		return makeBiquadBandpass1H(fc, f.q)
+	case "bandpass-2":
+		return makeBiquadBandpass2H(fc, f.q)
+	case "notch":
+		return makeBiquadNotchH(fc, f.q)
+	case "peaking":
+		return makeBiquadPeakingEQH(fc, f.q, f.gain)
+	case "lowshelf":
+		return makeBiquadLowShelfH(fc, f.q, f.gain)
+	case "highshelf":
+		return makeBiquadHighShelfH(fc, f.q, f.gain)
+	case "none":
+		fallthrough
 	default:
 		return makeNoFilterH()
 	}
@@ -456,7 +474,7 @@ func NewAudio() (*Audio, error) {
 		CommandCh:  commandCh,
 		state: &state{
 			osc:    &osc{kind: "sine", freq: 442},
-			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 10},
+			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 			gain:   0,
 			pos:    0,
 			oscOut: make([]float64, samplesPerCycle),
