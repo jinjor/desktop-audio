@@ -31,11 +31,24 @@ func main() {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	audio, err := audio.NewAudio()
+	a, err := audio.NewAudio()
 	if err != nil {
 		log.Fatalf("error: %v\n", err)
 	}
-	defer audio.Close()
+	defer a.Close()
+
+	midiIn := audio.ListenToMidiIn(ctx)
+	go func() {
+		for data := range midiIn {
+			if data[0]>>4 == 8 || data[0]>>4 == 9 && data[2] == 0 {
+				log.Printf("got note-off: %v\n", data)
+				a.NoteOff()
+			} else if data[0]>>4 == 9 && data[2] > 0 {
+				log.Printf("got note-on: %v\n", data)
+				a.NoteOn(int64(data[1]))
+			}
+		}
+	}()
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, os.Kill, syscall.SIGTERM)
@@ -51,13 +64,13 @@ func main() {
 	err = withIPCConnection(ctx, func(conn net.Conn) error {
 		g, ctx := errgroup.WithContext(ctx)
 		g.Go(func() error {
-			return audio.Start(ctx)
+			return a.Start(ctx)
 		})
 		g.Go(func() error {
-			return receiveCommands(ctx, conn, audio.CommandCh)
+			return receiveCommands(ctx, conn, a.CommandCh)
 		})
 		g.Go(func() error {
-			return sendReports(ctx, conn, audio)
+			return sendReports(ctx, conn, a)
 		})
 		return g.Wait()
 	})

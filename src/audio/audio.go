@@ -523,13 +523,33 @@ func (a *Audio) update(command []string) {
 		if err != nil {
 			panic(err)
 		}
-		a.state.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
-		a.state.gain = 0.3
+		a.noteOn(note)
 	case "note_off":
-		a.state.gain = 0
+		a.noteOff()
 	default:
 		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
+}
+
+// NoteOn ...
+func (a *Audio) NoteOn(note int64) {
+	a.state.Lock()
+	defer a.state.Unlock()
+	a.noteOn(note)
+}
+func (a *Audio) noteOn(note int64) {
+	a.state.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
+	a.state.gain = 0.3
+}
+
+// NoteOff ...
+func (a *Audio) NoteOff() {
+	a.state.Lock()
+	defer a.state.Unlock()
+	a.noteOff()
+}
+func (a *Audio) noteOff() {
+	a.state.gain = 0
 }
 
 // Close ...

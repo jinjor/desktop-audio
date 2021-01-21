@@ -104,13 +104,9 @@ const Canvas = (props: {
   [key: string]: any;
 }) => {
   const { listen, ...canvasProps } = props;
-  const canvasEl: React.MutableRefObject<HTMLCanvasElement | null> = useRef(
-    null
-  );
-  useEffect(() => {
-    return listen(canvasEl.current!);
-  }, []);
-  return <canvas {...canvasProps} ref={canvasEl}></canvas>;
+  const el: React.MutableRefObject<HTMLCanvasElement | null> = useRef(null);
+  useEffect(() => listen(el.current!), []);
+  return <canvas {...canvasProps} ref={el}></canvas>;
 };
 
 const Spectrum = () => {
