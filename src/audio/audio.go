@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"math"
-	"math/cmplx"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -149,19 +148,10 @@ func impulseResponse(a []float64, b []float64, n int) []float64 {
 	return out
 }
 
-func frequencyResponse(a []float64, b []float64, samples int, plots int) []float64 {
-	h := impulseResponse(a, b, samples)
-	Hw := make([]float64, plots)
-	for i := 0; i < plots; i++ {
-		fc := 0.5 / float64(plots) * float64(i)
-		w := 2.0 * math.Pi * fc
-		sum := complex(0, 0)
-		for j := 0; j < len(h); j++ {
-			sum += complex(h[j], 0) * cmplx.Exp(complex(0, -float64(j)*w))
-		}
-		Hw[i] = cmplx.Abs(sum)
-	}
-	return Hw
+func frequencyResponse(a []float64, b []float64) []float64 {
+	h := impulseResponse(a, b, fftSize)
+	fft.CalcAbs(h)
+	return h[:fftSize/2]
 }
 
 func makeNoFilterH() ([]float64, []float64) {
@@ -554,7 +544,7 @@ func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
 	_a, b := getH(a.state.filter)
 	a.state.Unlock()
-	return frequencyResponse(_a, b, 512, 128)
+	return frequencyResponse(_a, b)
 }
 
 // GetFFT ...
