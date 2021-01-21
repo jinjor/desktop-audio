@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, MenuItem } from "electron";
 import { AudioClient } from "./core/audio-client";
 import path from "path";
 import { createMenu } from "./core/menu";
@@ -6,6 +6,22 @@ import { createMenu } from "./core/menu";
 createMenu();
 
 (async () => {
+  // context menu
+  type RightClickPosition = { x: number; y: number };
+  let rightClickPosition: RightClickPosition | undefined;
+  const contextMenu = new Menu();
+  contextMenu.append(
+    new MenuItem({
+      label: "Inspect Element",
+      click: () => {
+        win!.webContents.inspectElement(
+          rightClickPosition!.x,
+          rightClickPosition!.y
+        );
+      },
+    })
+  );
+
   // set up AudioClient
   const audioClient = new AudioClient();
   audioClient.onConnected = () => {
@@ -36,9 +52,13 @@ createMenu();
   await audioClient.connect();
 
   // set up IPC
+  ipcMain.on("contextmenu", (_, pos: RightClickPosition) => {
+    rightClickPosition = pos;
+    contextMenu.popup();
+  });
   ipcMain.on("audio", (_, command: string[]) => {
     sent++;
-    // console.log("got message from web", command);
+    // console.log("got message from ui", command);
     audioClient.send(command);
   });
 

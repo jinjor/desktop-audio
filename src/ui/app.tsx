@@ -220,3 +220,7 @@ const App = () => {
 window.onload = () => {
   ReactDOM.render(<App />, document.getElementById("root"));
 };
+window.oncontextmenu = (e: MouseEvent) => {
+  e.preventDefault();
+  ipcRenderer.send("contextmenu", { x: e.x, y: e.y });
+};
