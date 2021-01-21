@@ -1,17 +1,14 @@
 # desktop-audio
 
-An experiment to play sounds with Web UI and without Web Audio API.
+An experiment to play sounds with Web UI and _without_ Web Audio API.
 
 ## Architecture
 
 ```
 ┌──────────────── Electron ────────────────┐
 ┌──────────────┐           ┌───────────────┐           ┌───────────┐
-│ ui(TS/React) │<-- IPC -->│ core(TS/Node) │<-- IPC -->│ audio(Go) │
-└──────────────┘           │               │           └───────────┘
-                           │               │       ┌─────────────┐
-                           │               │<----->│ File System │
-                           └───────────────┘       └─────────────┘
+│ ui(TS/React) │<-- IPC -->│ core(TS/Node) │<-- IPC -->│ audio(Go) │<--- MIDI
+└──────────────┘           └───────────────┘           └───────────┘
 ```
 
 ## IPC Protocol
