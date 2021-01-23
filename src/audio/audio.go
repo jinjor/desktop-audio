@@ -31,9 +31,21 @@ var fft = NewFFT(fftSize, false)
 type osc struct {
 	kind string
 	freq float64
+	out  []float64 // length: samplesPerCycle
+	on   bool
 }
 
-func (o *osc) Calc(pos int64) float64 {
+func (o *osc) calc(pos int64) {
+	for i := int64(0); i < int64(len(o.out)); i++ {
+		if o.on {
+			o.out[i] = o.calcEach(pos+i) * 0.3
+		} else {
+			o.out[i] = 0
+		}
+	}
+}
+
+func (o *osc) calcEach(pos int64) float64 {
 	switch o.kind {
 	case "sine":
 		length := float64(sampleRate) / float64(o.freq)
@@ -256,9 +268,7 @@ type state struct {
 	sync.Mutex
 	osc    *osc
 	filter *filter
-	gain   float64
 	pos    int64
-	oscOut []float64 // length: samplesPerCycle
 	out    []float64 // length: fftSize
 }
 
@@ -270,16 +280,14 @@ func (a *Audio) Read(buf []byte) (int, error) {
 	default:
 		a.state.Lock()
 		defer a.state.Unlock()
-		sampleLength := int64(len(buf) / bytesPerSample)
-		for i := int64(0); i < sampleLength; i++ {
-			a.state.oscOut[i] = a.state.osc.Calc(a.state.pos+i) * a.state.gain
-		}
+		bufSamples := int64(len(buf) / bytesPerSample)
+		a.state.osc.calc(a.state.pos)
 		offset := a.state.pos % fftSize
-		out := a.state.out[offset : offset+sampleLength]
-		a.state.filter.Process(a.state.oscOut, out)
+		out := a.state.out[offset : offset+bufSamples]
+		a.state.filter.Process(a.state.osc.out, out)
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
-		a.state.pos += sampleLength
+		a.state.pos += bufSamples
 		return len(buf), nil // io.EOF, etc.
 	}
 }
@@ -314,11 +322,9 @@ func NewAudio() (*Audio, error) {
 		otoContext: otoContext,
 		CommandCh:  commandCh,
 		state: &state{
-			osc:    &osc{kind: "sine", freq: 442},
+			osc:    &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
 			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
-			gain:   0,
 			pos:    0,
-			oscOut: make([]float64, samplesPerCycle),
 			out:    make([]float64, fftSize),
 		},
 		Changes: &Changes{
@@ -380,7 +386,7 @@ func (a *Audio) NoteOn(note int64) {
 }
 func (a *Audio) noteOn(note int64) {
 	a.state.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
-	a.state.gain = 0.3
+	a.state.osc.on = true
 }
 
 // NoteOff ...
@@ -390,7 +396,7 @@ func (a *Audio) NoteOff() {
 	a.noteOff()
 }
 func (a *Audio) noteOff() {
-	a.state.gain = 0
+	a.state.osc.on = false
 }
 
 // Close ...
