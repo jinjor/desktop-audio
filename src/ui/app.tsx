@@ -20,25 +20,111 @@ const WaveSelect: React.FC = () => {
   );
 };
 
+const Attack: React.FC = () => {
+  const onInput = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "adsr", "attack", value]);
+  };
+  return (
+    <div>
+      <label>
+        Attack
+        <input
+          onInput={onInput}
+          type="range"
+          min="0"
+          max="400"
+          defaultValue="10"
+        />
+      </label>
+    </div>
+  );
+};
+const Decay: React.FC = () => {
+  const onInput = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "adsr", "decay", value]);
+  };
+  return (
+    <div>
+      <label>
+        Decay
+        <input
+          onInput={onInput}
+          type="range"
+          min="0"
+          max="400"
+          defaultValue="100"
+        />
+      </label>
+    </div>
+  );
+};
+
+const Sustain: React.FC = () => {
+  const onInput = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "adsr", "sustain", value]);
+  };
+  return (
+    <div>
+      <label>
+        Sustain
+        <input
+          onInput={onInput}
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          defaultValue="0.7"
+        />
+      </label>
+    </div>
+  );
+};
+
+const Release: React.FC = () => {
+  const onInput = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", ["set", "adsr", "release", value]);
+  };
+  return (
+    <div>
+      <label>
+        Release
+        <input
+          onInput={onInput}
+          type="range"
+          min="0"
+          max="800"
+          defaultValue="400"
+        />
+      </label>
+    </div>
+  );
+};
+
 const FilterSelect: React.FC = () => {
   const onChange = (e: any) => {
     const value = e.target.value;
     ipcRenderer.send("audio", ["set", "filter", "kind", value]);
   };
   return (
-    <select onChange={onChange}>
-      <option>none</option>
-      <option>lowpass-fir</option>
-      <option>highpass-fir</option>
-      <option>lowpass</option>
-      <option>highpass</option>
-      <option>bandpass-1</option>
-      <option>bandpass-2</option>
-      <option>notch</option>
-      <option>peaking</option>
-      <option>lowshelf</option>
-      <option>highshelf</option>
-    </select>
+    <div>
+      <select onChange={onChange}>
+        <option>none</option>
+        <option>lowpass-fir</option>
+        <option>highpass-fir</option>
+        <option>lowpass</option>
+        <option>highpass</option>
+        <option>bandpass-1</option>
+        <option>bandpass-2</option>
+        <option>notch</option>
+        <option>peaking</option>
+        <option>lowshelf</option>
+        <option>highshelf</option>
+      </select>
+    </div>
   );
 };
 
@@ -48,16 +134,18 @@ const FilterFreq: React.FC = () => {
     ipcRenderer.send("audio", ["set", "filter", "freq", value]);
   };
   return (
-    <label>
-      Freq
-      <input
-        onInput={onInput}
-        type="range"
-        min="30"
-        max="20000"
-        defaultValue="1000"
-      />
-    </label>
+    <div>
+      <label>
+        Freq
+        <input
+          onInput={onInput}
+          type="range"
+          min="30"
+          max="20000"
+          defaultValue="1000"
+        />
+      </label>
+    </div>
   );
 };
 
@@ -67,16 +155,18 @@ const FilterQ: React.FC = () => {
     ipcRenderer.send("audio", ["set", "filter", "q", value]);
   };
   return (
-    <label>
-      Q
-      <input
-        onInput={onInput}
-        type="range"
-        min="0.1"
-        max="20"
-        defaultValue="1"
-      />
-    </label>
+    <div>
+      <label>
+        Q
+        <input
+          onInput={onInput}
+          type="range"
+          min="0.1"
+          max="20"
+          defaultValue="1"
+        />
+      </label>
+    </div>
   );
 };
 
@@ -86,16 +176,18 @@ const FilterGain: React.FC = () => {
     ipcRenderer.send("audio", ["set", "filter", "gain", value]);
   };
   return (
-    <label>
-      Gain
-      <input
-        onInput={onInput}
-        type="range"
-        min="-40"
-        max="40"
-        defaultValue="0"
-      />
-    </label>
+    <div>
+      <label>
+        Gain
+        <input
+          onInput={onInput}
+          type="range"
+          min="-40"
+          max="40"
+          defaultValue="0"
+        />
+      </label>
+    </div>
   );
 };
 
@@ -209,11 +301,21 @@ const App = () => {
     <React.Fragment>
       <h1>Desktop Audio</h1>
       <WaveSelect></WaveSelect>
-      <FilterSelect></FilterSelect>
-      <FilterFreq></FilterFreq>
-      <FilterQ></FilterQ>
-      <FilterGain></FilterGain>
-      <Notes></Notes>
+      <div style={{ display: "flex" }}>
+        <div>
+          <Attack />
+          <Decay />
+          <Sustain />
+          <Release />
+        </div>
+        <div>
+          <FilterSelect />
+          <FilterFreq />
+          <FilterQ />
+          <FilterGain />
+        </div>
+      </div>
+      <Notes />
       <Spectrum />
     </React.Fragment>
   );

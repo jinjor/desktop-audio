@@ -118,31 +118,73 @@ func (o *osc) set(key string, value string) error {
 // ----- ADSR ----- //
 
 type adsr struct {
-	attack  float64
-	decay   float64
-	sustain float64
-	release float64
-	on      bool
+	attack       float64 // ms
+	decay        float64 // ms
+	sustain      float64 // 0-1
+	release      float64 // ms
+	value        float64
+	phase        string // "attack", "decay", "sustain", "release" nil
+	phasePos     int
+	releaseValue float64
 }
 
 func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
-	for i := int64(0); i < int64(len(out)); i++ {
+	for i := range out {
 		if events := events[i]; events != nil {
 			for j := 0; j < len(events); j++ {
 				switch events[j].event.(type) {
 				case *noteOff:
-					a.on = false
+					a.phase = "release"
+					a.phasePos = 0
+					a.releaseValue = a.value
 				case *noteOn:
-					a.on = true
+					a.phase = "attack"
+					a.phasePos = 0
+					a.value = 0 // TODO
 				}
 			}
 		}
-		if a.on {
-			out[i] *= 1
-		} else {
-			out[i] *= 0
+
+		t := float64(a.phasePos) * secPerSample * 1000 // ms
+		switch a.phase {
+		case "attack":
+			a.value = t / float64(a.attack)
+			if t >= float64(a.attack) {
+				a.phase = "decay"
+				a.phasePos = 0
+				a.value = 1
+			} else {
+				a.phasePos++
+			}
+		case "decay":
+			a.value = exponentialRampToValue(1.0, a.sustain, t/float64(a.decay))
+			if t >= float64(a.decay) {
+				a.phase = "sustain"
+				a.phasePos = 0
+				a.value = float64(a.sustain)
+			} else {
+				a.phasePos++
+			}
+		case "sustain":
+			a.value = float64(a.sustain)
+		case "release":
+			a.value = exponentialRampToValue(a.releaseValue, 0.0, t/float64(a.release))
+			if t >= float64(a.release) {
+				a.phase = ""
+				a.phasePos = 0
+				a.value = 0
+			} else {
+				a.phasePos++
+			}
+		default:
+			a.value = 0
 		}
+		out[i] *= a.value
 	}
+}
+
+func exponentialRampToValue(initialValue float64, targetValue float64, pos float64) float64 {
+	return initialValue * math.Pow(targetValue/initialValue, pos)
 }
 
 func (a *adsr) set(key string, value string) error {
@@ -419,7 +461,7 @@ func NewAudio() (*Audio, error) {
 		state: &state{
 			events: make([][]*midiEvent, samplesPerCycle*2),
 			osc:    &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
-			adsr:   &adsr{},
+			adsr:   &adsr{attack: 10, decay: 100, sustain: 0.7, release: 400},
 			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 			pos:    0,
 			out:    make([]float64, fftSize),
