@@ -299,7 +299,7 @@ func (c *Changes) Delete(key string) {
 
 type state struct {
 	sync.Mutex
-	events   [][]*midiEvent // length: samplesPerCycle
+	events   [][]*midiEvent // length: samplesPerCycle * 2
 	osc      *osc
 	filter   *filter
 	pos      int64
@@ -325,7 +325,11 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		writeBuffer(a.state.out, offset, buf, 1)
 		a.state.pos += bufSamples
 		a.state.lastRead = timestamp
-		for i := 0; i < len(a.state.events); i++ {
+		eventLength := len(a.state.events)
+		for i := 0; i < eventLength; i++ {
+			if i >= eventLength/2 {
+				a.state.events[i-eventLength/2] = a.state.events[i]
+			}
 			a.state.events[i] = nil
 		}
 		return len(buf), nil // io.EOF, etc.
@@ -362,7 +366,7 @@ func NewAudio() (*Audio, error) {
 		otoContext: otoContext,
 		CommandCh:  commandCh,
 		state: &state{
-			events: make([][]*midiEvent, samplesPerCycle),
+			events: make([][]*midiEvent, samplesPerCycle*2),
 			osc:    &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
 			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 			pos:    0,
