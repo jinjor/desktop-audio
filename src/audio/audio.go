@@ -54,7 +54,6 @@ type osc struct {
 	kind string
 	freq float64
 	out  []float64 // length: samplesPerCycle
-	on   bool
 }
 
 func (o *osc) calc(pos int64, events [][]*midiEvent) {
@@ -62,19 +61,12 @@ func (o *osc) calc(pos int64, events [][]*midiEvent) {
 		if events := events[i]; events != nil {
 			for j := 0; j < len(events); j++ {
 				switch data := events[j].event.(type) {
-				case *noteOff:
-					o.on = false
 				case *noteOn:
 					o.freq = 442 * math.Pow(2, float64(data.note-69)/12)
-					o.on = true
 				}
 			}
 		}
-		if o.on {
-			o.out[i] = o.calcEach(pos+i) * 0.3
-		} else {
-			o.out[i] = 0
-		}
+		o.out[i] = o.calcEach(pos+i) * 0.3
 	}
 }
 
@@ -109,7 +101,7 @@ func (o *osc) calcEach(pos int64) float64 {
 	}
 	return 0
 }
-func (o *osc) Set(key string, value string) error {
+func (o *osc) set(key string, value string) error {
 	switch key {
 	case "kind":
 		o.kind = value
@@ -118,12 +110,69 @@ func (o *osc) Set(key string, value string) error {
 		if err != nil {
 			return err
 		}
-		o.SetFreq(freq)
+		o.freq = freq
 	}
 	return nil
 }
-func (o *osc) SetFreq(freq float64) {
-	o.freq = freq
+
+// ----- ADSR ----- //
+
+type adsr struct {
+	attack  float64
+	decay   float64
+	sustain float64
+	release float64
+	on      bool
+}
+
+func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
+	for i := int64(0); i < int64(len(out)); i++ {
+		if events := events[i]; events != nil {
+			for j := 0; j < len(events); j++ {
+				switch events[j].event.(type) {
+				case *noteOff:
+					a.on = false
+				case *noteOn:
+					a.on = true
+				}
+			}
+		}
+		if a.on {
+			out[i] *= 1
+		} else {
+			out[i] *= 0
+		}
+	}
+}
+
+func (a *adsr) set(key string, value string) error {
+	switch key {
+	case "attack":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		a.attack = value
+	case "decay":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		a.decay = value
+	case "sustain":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		a.sustain = value
+	case "release":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		a.release = value
+	}
+	return nil
 }
 
 // ----- Filter ----- //
@@ -301,6 +350,7 @@ type state struct {
 	sync.Mutex
 	events   [][]*midiEvent // length: samplesPerCycle * 2
 	osc      *osc
+	adsr     *adsr
 	filter   *filter
 	pos      int64
 	out      []float64 // length: fftSize
@@ -318,6 +368,7 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		timestamp := now()
 		bufSamples := int64(len(buf) / bytesPerSample)
 		a.state.osc.calc(a.state.pos, a.state.events)
+		a.state.adsr.calc(a.state.pos, a.state.events, a.state.osc.out)
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
 		a.state.filter.Process(a.state.osc.out, out)
@@ -368,6 +419,7 @@ func NewAudio() (*Audio, error) {
 		state: &state{
 			events: make([][]*midiEvent, samplesPerCycle*2),
 			osc:    &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
+			adsr:   &adsr{},
 			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 			pos:    0,
 			out:    make([]float64, fftSize),
@@ -401,7 +453,13 @@ func (a *Audio) update(command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			a.state.osc.Set(command[0], command[1])
+			a.state.osc.set(command[0], command[1])
+		case "adsr":
+			command = command[1:]
+			if len(command) != 2 {
+				panic(fmt.Errorf("invalid key-value pair %v", command))
+			}
+			a.state.adsr.set(command[0], command[1])
 		case "filter":
 			command = command[1:]
 			if len(command) != 2 {
