@@ -40,13 +40,7 @@ func main() {
 	midiIn := audio.ListenToMidiIn(ctx)
 	go func() {
 		for data := range midiIn {
-			if data[0]>>4 == 8 || data[0]>>4 == 9 && data[2] == 0 {
-				log.Printf("got note-off: %v\n", data)
-				a.NoteOff()
-			} else if data[0]>>4 == 9 && data[2] > 0 {
-				log.Printf("got note-on: %v\n", data)
-				a.NoteOn(int64(data[1]))
-			}
+			a.AddMidiEvent(data)
 		}
 	}()
 

@@ -9,22 +9,44 @@ import (
 	"math/rand"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/hajimehoshi/oto"
 )
 
 const (
-	sampleRate        = 48000
-	channelNum        = 2
-	bitDepthInBytes   = 2
-	bufferSizeInBytes = 4096
-	samplesPerCycle   = 128
-	fftSize           = 2048
+	sampleRate      = 48000
+	channelNum      = 2
+	bitDepthInBytes = 2
+	samplesPerCycle = 1024
+	fftSize         = 2048 // multiple of samplesPerCycle
 )
 const bytesPerSample = bitDepthInBytes * channelNum
-const byteLengthPerCycle = samplesPerCycle * bytesPerSample
+const bufferSizeInBytes = samplesPerCycle * bytesPerSample // should be >= 4096
+const secPerSample = 1.0 / sampleRate
+const responseDelay = secPerSample * samplesPerCycle
 
 var fft = NewFFT(fftSize, false)
+
+// ----- Utility ----- //
+
+func now() float64 {
+	return float64(time.Now().UnixNano()) / 1000 / 1000 / 1000
+}
+
+// ----- MIDI Event ----- //
+
+type midiEvent struct {
+	offset float64
+	event  interface{}
+}
+
+type noteOn struct {
+	note int
+}
+type noteOff struct {
+	note int
+}
 
 // ----- OSC ----- //
 
@@ -35,8 +57,19 @@ type osc struct {
 	on   bool
 }
 
-func (o *osc) calc(pos int64) {
+func (o *osc) calc(pos int64, events [][]*midiEvent) {
 	for i := int64(0); i < int64(len(o.out)); i++ {
+		if events := events[i]; events != nil {
+			for j := 0; j < len(events); j++ {
+				switch data := events[j].event.(type) {
+				case *noteOff:
+					o.on = false
+				case *noteOn:
+					o.freq = 442 * math.Pow(2, float64(data.note-69)/12)
+					o.on = true
+				}
+			}
+		}
 		if o.on {
 			o.out[i] = o.calcEach(pos+i) * 0.3
 		} else {
@@ -266,10 +299,12 @@ func (c *Changes) Delete(key string) {
 
 type state struct {
 	sync.Mutex
-	osc    *osc
-	filter *filter
-	pos    int64
-	out    []float64 // length: fftSize
+	events   [][]*midiEvent // length: samplesPerCycle
+	osc      *osc
+	filter   *filter
+	pos      int64
+	out      []float64 // length: fftSize
+	lastRead float64
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -280,14 +315,19 @@ func (a *Audio) Read(buf []byte) (int, error) {
 	default:
 		a.state.Lock()
 		defer a.state.Unlock()
+		timestamp := now()
 		bufSamples := int64(len(buf) / bytesPerSample)
-		a.state.osc.calc(a.state.pos)
+		a.state.osc.calc(a.state.pos, a.state.events)
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
 		a.state.filter.Process(a.state.osc.out, out)
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
 		a.state.pos += bufSamples
+		a.state.lastRead = timestamp
+		for i := 0; i < len(a.state.events); i++ {
+			a.state.events[i] = nil
+		}
 		return len(buf), nil // io.EOF, etc.
 	}
 }
@@ -322,6 +362,7 @@ func NewAudio() (*Audio, error) {
 		otoContext: otoContext,
 		CommandCh:  commandCh,
 		state: &state{
+			events: make([][]*midiEvent, samplesPerCycle),
 			osc:    &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
 			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 			pos:    0,
@@ -370,33 +411,16 @@ func (a *Audio) update(command []string) {
 		if err != nil {
 			panic(err)
 		}
-		a.noteOn(note)
+		a.addMidiEvent(&noteOn{note: int(note)})
 	case "note_off":
-		a.noteOff()
+		note, err := strconv.ParseInt(command[1], 10, 32)
+		if err != nil {
+			panic(err)
+		}
+		a.addMidiEvent(&noteOff{note: int(note)})
 	default:
 		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
-}
-
-// NoteOn ...
-func (a *Audio) NoteOn(note int64) {
-	a.state.Lock()
-	defer a.state.Unlock()
-	a.noteOn(note)
-}
-func (a *Audio) noteOn(note int64) {
-	a.state.osc.SetFreq(442 * math.Pow(2, float64(note-69)/12))
-	a.state.osc.on = true
-}
-
-// NoteOff ...
-func (a *Audio) NoteOff() {
-	a.state.Lock()
-	defer a.state.Unlock()
-	a.noteOff()
-}
-func (a *Audio) noteOff() {
-	a.state.osc.on = false
 }
 
 // Close ...
@@ -417,7 +441,7 @@ func (a *Audio) Start(ctx context.Context) error {
 	a.ctx = ctx
 
 	// block until cancel() called
-	if _, err := io.CopyBuffer(p, a, make([]byte, byteLengthPerCycle)); err != nil {
+	if _, err := io.CopyBuffer(p, a, make([]byte, bufferSizeInBytes)); err != nil {
 		return err
 	}
 	log.Println("Start() ended.")
@@ -449,4 +473,33 @@ func (a *Audio) GetFFT() []float64 {
 		a.fftResult[i] = value * 2 / fftSize
 	}
 	return a.fftResult[:fftSize/2]
+}
+
+// AddMidiEvent ...
+func (a *Audio) AddMidiEvent(data []byte) {
+	a.state.Lock()
+	defer a.state.Unlock()
+	if data[0]>>4 == 8 || data[0]>>4 == 9 && data[2] == 0 {
+		log.Printf("got note-off: %v\n", data)
+		note := int(data[1])
+		a.addMidiEvent(&noteOff{note: note})
+	} else if data[0]>>4 == 9 && data[2] > 0 {
+		log.Printf("got note-on: %v\n", data)
+		note := int(data[1])
+		a.addMidiEvent(&noteOn{note: note})
+	}
+}
+
+func (a *Audio) addMidiEvent(event interface{}) {
+	offset := now() - a.state.lastRead
+	index := int(offset / secPerSample)
+	if index < 0 {
+		log.Println("[WARN] index < 0")
+		index = 0
+	}
+	if index >= len(a.state.events) {
+		log.Println("[WARN] index >= event length")
+		index = len(a.state.events) - 1
+	}
+	a.state.events[index] = append(a.state.events[index], &midiEvent{offset: offset, event: event})
 }

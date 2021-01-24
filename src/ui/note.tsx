@@ -9,7 +9,7 @@ const Note: React.FC<{
     ipcRenderer.send("audio", ["note_on", String(number)]);
   };
   const onMouseUp = () => {
-    ipcRenderer.send("audio", ["note_off"]);
+    ipcRenderer.send("audio", ["note_off", String(number)]);
   };
   const onMouseEnter = () => {
     if (pressed) {
@@ -18,7 +18,7 @@ const Note: React.FC<{
   };
   const onMouseLeave = () => {
     if (pressed) {
-      ipcRenderer.send("audio", ["note_off"]);
+      ipcRenderer.send("audio", ["note_off", String(number)]);
     }
   };
   return (
