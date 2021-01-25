@@ -97,7 +97,7 @@ const Release: React.FC = () => {
           type="range"
           min="0"
           max="800"
-          defaultValue="400"
+          defaultValue="200"
         />
       </label>
     </div>

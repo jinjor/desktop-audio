@@ -20,6 +20,7 @@ const (
 	bitDepthInBytes = 2
 	samplesPerCycle = 1024
 	fftSize         = 2048 // multiple of samplesPerCycle
+	maxPoly         = 128
 )
 const bytesPerSample = bitDepthInBytes * channelNum
 const bufferSizeInBytes = samplesPerCycle * bytesPerSample // should be >= 4096
@@ -48,12 +49,94 @@ type noteOff struct {
 	note int
 }
 
+// ----- POLY OSC ----- //
+
+type polyOsc struct {
+	// pooled + active = maxPoly
+	pooled []*oscWithADSR
+	active []*oscWithADSR
+	out    []float64 // length: samplesPerCycle
+}
+
+func newPolyOsc() *polyOsc {
+	pooled := make([]*oscWithADSR, maxPoly)
+	for i := 0; i < len(pooled); i++ {
+		pooled[i] = &oscWithADSR{
+			osc:  &osc{},
+			adsr: &adsr{},
+		}
+	}
+	return &polyOsc{
+		pooled: pooled,
+		out:    make([]float64, samplesPerCycle),
+	}
+}
+
+func (p *polyOsc) calc(pos int64, events [][]*midiEvent, baseOsc *osc, baseAdsr *adsr) {
+	for i := int64(0); i < int64(len(p.out)); i++ {
+		p.out[i] = 0
+		events := events[i]
+		for j := 0; j < len(events); j++ {
+			switch data := events[j].event.(type) {
+			case *noteOn:
+				lenPooled := len(p.pooled)
+				if lenPooled > 0 {
+					o := p.pooled[lenPooled-1]
+					p.pooled = p.pooled[:lenPooled-1]
+					p.active = append(p.active, o)
+					o.note = data.note
+					o.osc.copyFrom(baseOsc)
+					o.adsr.copyFrom(baseAdsr)
+					o.osc.freq = 442 * math.Pow(2, float64(data.note-69)/12)
+				} else {
+					log.Println("maxPoly exceeded")
+				}
+			}
+		}
+		for j := len(p.active) - 1; j >= 0; j-- {
+			o := p.active[j]
+			value := o.osc.calcEach(pos+int64(i)) * 0.1
+			for _, e := range events {
+				switch data := e.event.(type) {
+				case *noteOff:
+					if data.note == o.note {
+						o.adsr.noteOff()
+					}
+				case *noteOn:
+					if data.note == o.note {
+						o.adsr.noteOn()
+					}
+				}
+			}
+			o.adsr.step()
+			p.out[i] += value * o.adsr.value
+			if o.adsr.phase == "" {
+				p.active = append(p.active[:j], p.active[j+1:]...)
+				p.pooled = append(p.pooled, o)
+			}
+		}
+	}
+}
+
+// ----- OSC WITH ADSR ----- //
+
+type oscWithADSR struct {
+	note int
+	osc  *osc
+	adsr *adsr
+}
+
 // ----- OSC ----- //
 
 type osc struct {
 	kind string
 	freq float64
 	out  []float64 // length: samplesPerCycle
+}
+
+func (o *osc) copyFrom(base *osc) {
+	o.kind = base.kind
+	o.freq = base.freq
 }
 
 func (o *osc) calc(pos int64, events [][]*midiEvent) {
@@ -66,7 +149,7 @@ func (o *osc) calc(pos int64, events [][]*midiEvent) {
 				}
 			}
 		}
-		o.out[i] = o.calcEach(pos+i) * 0.3
+		o.out[i] = o.calcEach(pos+i) * 0.1
 	}
 }
 
@@ -128,58 +211,80 @@ type adsr struct {
 	releaseValue float64
 }
 
+func (a *adsr) copyFrom(base *adsr) {
+	a.attack = base.attack
+	a.decay = base.decay
+	a.sustain = base.sustain
+	a.release = base.release
+	a.value = 0
+	a.phase = ""
+	a.phasePos = 0
+	a.releaseValue = 0
+}
+
 func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
 	for i := range out {
-		if events := events[i]; events != nil {
-			for j := 0; j < len(events); j++ {
-				switch events[j].event.(type) {
-				case *noteOff:
-					a.phase = "release"
-					a.phasePos = 0
-					a.releaseValue = a.value
-				case *noteOn:
-					a.phase = "attack"
-					a.phasePos = 0
-					a.value = 0 // TODO
-				}
+		for _, e := range events[i] {
+			switch e.event.(type) {
+			case *noteOff:
+				a.noteOff()
+			case *noteOn:
+				a.noteOn()
 			}
 		}
-
-		t := float64(a.phasePos) * secPerSample * 1000 // ms
-		switch a.phase {
-		case "attack":
-			a.value = t / float64(a.attack)
-			if t >= float64(a.attack) {
-				a.phase = "decay"
-				a.phasePos = 0
-				a.value = 1
-			} else {
-				a.phasePos++
-			}
-		case "decay":
-			a.value = exponentialRampToValue(1.0, a.sustain, t/float64(a.decay))
-			if t >= float64(a.decay) {
-				a.phase = "sustain"
-				a.phasePos = 0
-				a.value = float64(a.sustain)
-			} else {
-				a.phasePos++
-			}
-		case "sustain":
-			a.value = float64(a.sustain)
-		case "release":
-			a.value = exponentialRampToValue(a.releaseValue, 0.0, t/float64(a.release))
-			if t >= float64(a.release) {
-				a.phase = ""
-				a.phasePos = 0
-				a.value = 0
-			} else {
-				a.phasePos++
-			}
-		default:
-			a.value = 0
-		}
+		a.step()
 		out[i] *= a.value
+	}
+}
+
+func (a *adsr) noteOn() {
+	if a.phase == "" {
+		a.phase = "attack"
+		a.phasePos = 0
+		a.value = 0
+	}
+}
+
+func (a *adsr) noteOff() {
+	a.phase = "release"
+	a.phasePos = 0
+	a.releaseValue = a.value
+}
+
+func (a *adsr) step() {
+	t := float64(a.phasePos) * secPerSample * 1000 // ms
+	switch a.phase {
+	case "attack":
+		a.value = t / float64(a.attack)
+		if t >= float64(a.attack) {
+			a.phase = "decay"
+			a.phasePos = 0
+			a.value = 1
+		} else {
+			a.phasePos++
+		}
+	case "decay":
+		a.value = exponentialRampToValue(1.0, a.sustain, t/float64(a.decay))
+		if t >= float64(a.decay) {
+			a.phase = "sustain"
+			a.phasePos = 0
+			a.value = float64(a.sustain)
+		} else {
+			a.phasePos++
+		}
+	case "sustain":
+		a.value = float64(a.sustain)
+	case "release":
+		a.value = exponentialRampToValue(a.releaseValue, 0.0, t/float64(a.release))
+		if t >= float64(a.release) {
+			a.phase = ""
+			a.phasePos = 0
+			a.value = 0
+		} else {
+			a.phasePos++
+		}
+	default:
+		a.value = 0
 	}
 }
 
@@ -230,12 +335,12 @@ type filter struct {
 	past []float64
 }
 
-func (f *filter) Process(in []float64, out []float64) {
+func (f *filter) process(in []float64, out []float64) {
 	if len(f.a) == 0 {
 		f.a, f.b = getH(f)
 		f.past = make([]float64, int(math.Max(float64(len(f.a)-1), float64(len(f.b)))))
 	}
-	process(in, out, f.a, f.b, f.past)
+	processFilter(in, out, f.a, f.b, f.past)
 }
 
 func getH(f *filter) ([]float64, []float64) {
@@ -268,7 +373,7 @@ func getH(f *filter) ([]float64, []float64) {
 	}
 }
 
-func process(in []float64, out []float64, a []float64, b []float64, past []float64) {
+func processFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
 	for i := 0; i < len(in); i++ {
 		// get input
 		tmp := in[i]
@@ -298,7 +403,7 @@ func impulseResponse(a []float64, b []float64, n int) []float64 {
 	out := make([]float64, n)
 	past := make([]float64, int(math.Max(float64(len(a)-1), float64(len(b)))))
 	in[0] = 1
-	process(in, out, a, b, past)
+	processFilter(in, out, a, b, past)
 	return out
 }
 
@@ -308,7 +413,7 @@ func frequencyResponse(a []float64, b []float64) []float64 {
 	return h[:fftSize/2]
 }
 
-func (f *filter) Set(key string, value string) error {
+func (f *filter) set(key string, value string) error {
 	switch key {
 	case "kind":
 		f.kind = value
@@ -393,6 +498,8 @@ type state struct {
 	events   [][]*midiEvent // length: samplesPerCycle * 2
 	osc      *osc
 	adsr     *adsr
+	polyMode bool
+	polyOsc  *polyOsc
 	filter   *filter
 	pos      int64
 	out      []float64 // length: fftSize
@@ -409,11 +516,17 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		defer a.state.Unlock()
 		timestamp := now()
 		bufSamples := int64(len(buf) / bytesPerSample)
-		a.state.osc.calc(a.state.pos, a.state.events)
-		a.state.adsr.calc(a.state.pos, a.state.events, a.state.osc.out)
+
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
-		a.state.filter.Process(a.state.osc.out, out)
+		if a.state.polyMode {
+			a.state.polyOsc.calc(a.state.pos, a.state.events, a.state.osc, a.state.adsr)
+			a.state.filter.process(a.state.polyOsc.out, out)
+		} else {
+			a.state.osc.calc(a.state.pos, a.state.events)
+			a.state.adsr.calc(a.state.pos, a.state.events, a.state.osc.out)
+			a.state.filter.process(a.state.osc.out, out)
+		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
 		a.state.pos += bufSamples
@@ -459,12 +572,14 @@ func NewAudio() (*Audio, error) {
 		otoContext: otoContext,
 		CommandCh:  commandCh,
 		state: &state{
-			events: make([][]*midiEvent, samplesPerCycle*2),
-			osc:    &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
-			adsr:   &adsr{attack: 10, decay: 100, sustain: 0.7, release: 400},
-			filter: &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
-			pos:    0,
-			out:    make([]float64, fftSize),
+			events:   make([][]*midiEvent, samplesPerCycle*2),
+			osc:      &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
+			adsr:     &adsr{attack: 10, decay: 100, sustain: 0.7, release: 200},
+			polyMode: true,
+			polyOsc:  newPolyOsc(),
+			filter:   &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
+			pos:      0,
+			out:      make([]float64, fftSize),
 		},
 		Changes: &Changes{
 			dict: make(map[string]struct{}),
@@ -507,7 +622,7 @@ func (a *Audio) update(command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			a.state.filter.Set(command[0], command[1])
+			a.state.filter.set(command[0], command[1])
 			a.Changes.Add("filter-shape")
 		}
 	case "note_on":
