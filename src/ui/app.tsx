@@ -2,6 +2,7 @@ import { ipcRenderer } from "electron";
 import ReactDOM from "react-dom";
 import React, { useState, useEffect, useRef } from "react";
 import { Notes } from "./note";
+import { Knob } from "./knob";
 
 const MonoPolySelect: React.FC = () => {
   const onChange = (e: any) => {
@@ -312,7 +313,14 @@ const App = () => {
   }, []);
   return (
     <React.Fragment>
-      <h1>Desktop Audio</h1>
+      <Knob
+        min={0}
+        max={1}
+        step={0.01}
+        exponential={false}
+        value={0.3}
+        onInput={() => {}}
+      />
       <MonoPolySelect />
       <WaveSelect />
       <div style={{ display: "flex" }}>
