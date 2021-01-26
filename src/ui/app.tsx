@@ -3,6 +3,19 @@ import ReactDOM from "react-dom";
 import React, { useState, useEffect, useRef } from "react";
 import { Notes } from "./note";
 
+const MonoPolySelect: React.FC = () => {
+  const onChange = (e: any) => {
+    const value = e.target.value;
+    ipcRenderer.send("audio", [value]);
+  };
+  return (
+    <select onChange={onChange}>
+      <option>mono</option>
+      <option>poly</option>
+    </select>
+  );
+};
+
 const WaveSelect: React.FC = () => {
   const onChange = (e: any) => {
     const value = e.target.value;
@@ -300,7 +313,8 @@ const App = () => {
   return (
     <React.Fragment>
       <h1>Desktop Audio</h1>
-      <WaveSelect></WaveSelect>
+      <MonoPolySelect />
+      <WaveSelect />
       <div style={{ display: "flex" }}>
         <div>
           <Attack />

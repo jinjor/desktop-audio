@@ -49,6 +49,41 @@ type noteOff struct {
 	note int
 }
 
+// ----- MONO OSC ----- //
+
+type monoOsc struct {
+	osc  *osc
+	adsr *adsr
+	out  []float64 // length: samplesPerCycle
+}
+
+func newMonoOsc() *monoOsc {
+	return &monoOsc{
+		osc:  &osc{},
+		adsr: &adsr{},
+		out:  make([]float64, samplesPerCycle),
+	}
+}
+
+func (m *monoOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, adsrParams *adsrParams) {
+	m.osc.init(oscParams)
+	m.adsr.setParams(adsrParams)
+	for i := int64(0); i < int64(len(m.out)); i++ {
+		m.out[i] = 0
+		for _, e := range events[i] {
+			switch data := e.event.(type) {
+			case *noteOn:
+				m.osc.freq = 442 * math.Pow(2, float64(data.note-69)/12)
+				m.adsr.noteOn()
+			case *noteOff:
+				m.adsr.noteOff()
+			}
+		}
+		m.adsr.step()
+		m.out[i] += m.osc.calcEach(pos+i) * 0.1 * m.adsr.value
+	}
+}
+
 // ----- POLY OSC ----- //
 
 type polyOsc struct {
@@ -72,7 +107,7 @@ func newPolyOsc() *polyOsc {
 	}
 }
 
-func (p *polyOsc) calc(pos int64, events [][]*midiEvent, baseOsc *osc, baseAdsr *adsr) {
+func (p *polyOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, adsrParams *adsrParams) {
 	for i := int64(0); i < int64(len(p.out)); i++ {
 		p.out[i] = 0
 		events := events[i]
@@ -85,8 +120,8 @@ func (p *polyOsc) calc(pos int64, events [][]*midiEvent, baseOsc *osc, baseAdsr 
 					p.pooled = p.pooled[:lenPooled-1]
 					p.active = append(p.active, o)
 					o.note = data.note
-					o.osc.copyFrom(baseOsc)
-					o.adsr.copyFrom(baseAdsr)
+					o.osc.init(oscParams)
+					o.adsr.init(adsrParams)
 					o.osc.freq = 442 * math.Pow(2, float64(data.note-69)/12)
 				} else {
 					log.Println("maxPoly exceeded")
@@ -128,29 +163,26 @@ type oscWithADSR struct {
 
 // ----- OSC ----- //
 
+type oscParams struct {
+	kind string
+}
+
+func (o *oscParams) set(key string, value string) error {
+	switch key {
+	case "kind":
+		o.kind = value
+	}
+	return nil
+}
+
 type osc struct {
 	kind string
 	freq float64
 	out  []float64 // length: samplesPerCycle
 }
 
-func (o *osc) copyFrom(base *osc) {
-	o.kind = base.kind
-	o.freq = base.freq
-}
-
-func (o *osc) calc(pos int64, events [][]*midiEvent) {
-	for i := int64(0); i < int64(len(o.out)); i++ {
-		if events := events[i]; events != nil {
-			for j := 0; j < len(events); j++ {
-				switch data := events[j].event.(type) {
-				case *noteOn:
-					o.freq = 442 * math.Pow(2, float64(data.note-69)/12)
-				}
-			}
-		}
-		o.out[i] = o.calcEach(pos+i) * 0.1
-	}
+func (o *osc) init(p *oscParams) {
+	o.kind = p.kind
 }
 
 func (o *osc) calcEach(pos int64) float64 {
@@ -184,21 +216,45 @@ func (o *osc) calcEach(pos int64) float64 {
 	}
 	return 0
 }
-func (o *osc) set(key string, value string) error {
+
+// ----- ADSR ----- //
+
+type adsrParams struct {
+	attack  float64 // ms
+	decay   float64 // ms
+	sustain float64 // 0-1
+	release float64 // ms
+}
+
+func (a *adsrParams) set(key string, value string) error {
 	switch key {
-	case "kind":
-		o.kind = value
-	case "freq":
-		freq, err := strconv.ParseFloat(value, 64)
+	case "attack":
+		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
-		o.freq = freq
+		a.attack = value
+	case "decay":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		a.decay = value
+	case "sustain":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		a.sustain = value
+	case "release":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		a.release = value
 	}
 	return nil
 }
-
-// ----- ADSR ----- //
 
 type adsr struct {
 	attack       float64 // ms
@@ -211,15 +267,19 @@ type adsr struct {
 	releaseValue float64
 }
 
-func (a *adsr) copyFrom(base *adsr) {
-	a.attack = base.attack
-	a.decay = base.decay
-	a.sustain = base.sustain
-	a.release = base.release
+func (a *adsr) init(p *adsrParams) {
+	a.setParams(p)
 	a.value = 0
 	a.phase = ""
 	a.phasePos = 0
 	a.releaseValue = 0
+}
+
+func (a *adsr) setParams(p *adsrParams) {
+	a.attack = p.attack
+	a.decay = p.decay
+	a.sustain = p.sustain
+	a.release = p.release
 }
 
 func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
@@ -290,36 +350,6 @@ func (a *adsr) step() {
 
 func exponentialRampToValue(initialValue float64, targetValue float64, pos float64) float64 {
 	return initialValue * math.Pow(targetValue/initialValue, pos)
-}
-
-func (a *adsr) set(key string, value string) error {
-	switch key {
-	case "attack":
-		value, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		a.attack = value
-	case "decay":
-		value, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		a.decay = value
-	case "sustain":
-		value, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		a.sustain = value
-	case "release":
-		value, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		a.release = value
-	}
-	return nil
 }
 
 // ----- Filter ----- //
@@ -495,15 +525,16 @@ func (c *Changes) Delete(key string) {
 
 type state struct {
 	sync.Mutex
-	events   [][]*midiEvent // length: samplesPerCycle * 2
-	osc      *osc
-	adsr     *adsr
-	polyMode bool
-	polyOsc  *polyOsc
-	filter   *filter
-	pos      int64
-	out      []float64 // length: fftSize
-	lastRead float64
+	events     [][]*midiEvent // length: samplesPerCycle * 2
+	oscParams  *oscParams
+	adsrParams *adsrParams
+	polyMode   bool
+	monoOsc    *monoOsc
+	polyOsc    *polyOsc
+	filter     *filter
+	pos        int64
+	out        []float64 // length: fftSize
+	lastRead   float64
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -520,12 +551,11 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.pos, a.state.events, a.state.osc, a.state.adsr)
+			a.state.polyOsc.calc(a.state.pos, a.state.events, a.state.oscParams, a.state.adsrParams)
 			a.state.filter.process(a.state.polyOsc.out, out)
 		} else {
-			a.state.osc.calc(a.state.pos, a.state.events)
-			a.state.adsr.calc(a.state.pos, a.state.events, a.state.osc.out)
-			a.state.filter.process(a.state.osc.out, out)
+			a.state.monoOsc.calc(a.state.pos, a.state.events, a.state.oscParams, a.state.adsrParams)
+			a.state.filter.process(a.state.monoOsc.out, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
@@ -572,14 +602,15 @@ func NewAudio() (*Audio, error) {
 		otoContext: otoContext,
 		CommandCh:  commandCh,
 		state: &state{
-			events:   make([][]*midiEvent, samplesPerCycle*2),
-			osc:      &osc{kind: "sine", freq: 442, out: make([]float64, samplesPerCycle)},
-			adsr:     &adsr{attack: 10, decay: 100, sustain: 0.7, release: 200},
-			polyMode: true,
-			polyOsc:  newPolyOsc(),
-			filter:   &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
-			pos:      0,
-			out:      make([]float64, fftSize),
+			events:     make([][]*midiEvent, samplesPerCycle*2),
+			oscParams:  &oscParams{kind: "sine"},
+			adsrParams: &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
+			polyMode:   false,
+			monoOsc:    newMonoOsc(),
+			polyOsc:    newPolyOsc(),
+			filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
+			pos:        0,
+			out:        make([]float64, fftSize),
 		},
 		Changes: &Changes{
 			dict: make(map[string]struct{}),
@@ -610,13 +641,13 @@ func (a *Audio) update(command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			a.state.osc.set(command[0], command[1])
+			a.state.oscParams.set(command[0], command[1])
 		case "adsr":
 			command = command[1:]
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			a.state.adsr.set(command[0], command[1])
+			a.state.adsrParams.set(command[0], command[1])
 		case "filter":
 			command = command[1:]
 			if len(command) != 2 {
@@ -625,6 +656,10 @@ func (a *Audio) update(command []string) {
 			a.state.filter.set(command[0], command[1])
 			a.Changes.Add("filter-shape")
 		}
+	case "mono":
+		a.state.polyMode = false
+	case "poly":
+		a.state.polyMode = true
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
