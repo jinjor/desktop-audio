@@ -35,85 +35,84 @@ const WaveSelect: React.FC = () => {
 };
 
 const Attack: React.FC = () => {
-  const onInput = (e: any) => {
-    const value = e.target.value;
+  const [value, setValue] = useState(10);
+  const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "attack", value]);
+    setValue(value);
   };
   return (
     <div>
-      <label>
-        Attack
-        <input
-          onInput={onInput}
-          type="range"
-          min="0"
-          max="400"
-          defaultValue="10"
-        />
-      </label>
+      <Knob
+        min={0}
+        max={400}
+        steps={400}
+        exponential={true}
+        value={value}
+        onInput={onInput}
+      />
+      <label>Attack</label>
     </div>
   );
 };
 const Decay: React.FC = () => {
-  const onInput = (e: any) => {
-    const value = e.target.value;
+  const [value, setValue] = useState(100);
+  const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "decay", value]);
+    setValue(value);
   };
   return (
     <div>
-      <label>
-        Decay
-        <input
-          onInput={onInput}
-          type="range"
-          min="0"
-          max="400"
-          defaultValue="100"
-        />
-      </label>
+      <Knob
+        min={0}
+        max={400}
+        steps={400}
+        exponential={true}
+        value={value}
+        onInput={onInput}
+      />
+      <label>Decay</label>
     </div>
   );
 };
 
 const Sustain: React.FC = () => {
-  const onInput = (e: any) => {
-    const value = e.target.value;
+  const [value, setValue] = useState(0.7);
+  const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "sustain", value]);
+    setValue(value);
   };
   return (
     <div>
-      <label>
-        Sustain
-        <input
-          onInput={onInput}
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          defaultValue="0.7"
-        />
-      </label>
+      <Knob
+        min={0}
+        max={1}
+        steps={400}
+        exponential={false}
+        value={value}
+        onInput={onInput}
+      />
+      <label>Sustain</label>
     </div>
   );
 };
 
 const Release: React.FC = () => {
-  const onInput = (e: any) => {
-    const value = e.target.value;
+  const [value, setValue] = useState(200);
+  const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "release", value]);
+    setValue(value);
   };
   return (
     <div>
-      <label>
-        Release
-        <input
-          onInput={onInput}
-          type="range"
-          min="0"
-          max="800"
-          defaultValue="200"
-        />
-      </label>
+      <Knob
+        min={0}
+        max={800}
+        steps={400}
+        exponential={true}
+        value={value}
+        onInput={onInput}
+      />
+      <label>Release</label>
     </div>
   );
 };
@@ -143,64 +142,64 @@ const FilterSelect: React.FC = () => {
 };
 
 const FilterFreq: React.FC = () => {
-  const onInput = (e: any) => {
-    const value = e.target.value;
+  const [value, setValue] = useState(1000);
+  const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "filter", "freq", value]);
+    setValue(value);
   };
   return (
     <div>
-      <label>
-        Freq
-        <input
-          onInput={onInput}
-          type="range"
-          min="30"
-          max="20000"
-          defaultValue="1000"
-        />
-      </label>
+      <Knob
+        min={30}
+        max={20000}
+        steps={400}
+        exponential={true}
+        value={value}
+        onInput={onInput}
+      />
+      <label>Freq</label>
     </div>
   );
 };
 
 const FilterQ: React.FC = () => {
-  const onInput = (e: any) => {
-    const value = e.target.value;
+  const [value, setValue] = useState(0);
+  const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "filter", "q", value]);
+    setValue(value);
   };
   return (
     <div>
-      <label>
-        Q
-        <input
-          onInput={onInput}
-          type="range"
-          min="0.1"
-          max="20"
-          defaultValue="1"
-        />
-      </label>
+      <Knob
+        min={0}
+        max={20}
+        steps={400}
+        exponential={false}
+        value={value}
+        onInput={onInput}
+      />
+      <label>Q</label>
     </div>
   );
 };
 
 const FilterGain: React.FC = () => {
-  const onInput = (e: any) => {
-    const value = e.target.value;
+  const [value, setValue] = useState(0);
+  const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "filter", "gain", value]);
+    setValue(value);
   };
   return (
     <div>
-      <label>
-        Gain
-        <input
-          onInput={onInput}
-          type="range"
-          min="-40"
-          max="40"
-          defaultValue="0"
-        />
-      </label>
+      <Knob
+        min={-40}
+        max={40}
+        steps={400}
+        exponential={false}
+        value={value}
+        onInput={onInput}
+      />
+      <label>Gain</label>
     </div>
   );
 };
@@ -313,14 +312,6 @@ const App = () => {
   }, []);
   return (
     <React.Fragment>
-      <Knob
-        min={0}
-        max={1}
-        step={0.01}
-        exponential={false}
-        value={0.3}
-        onInput={() => {}}
-      />
       <MonoPolySelect />
       <WaveSelect />
       <div style={{ display: "flex" }}>
