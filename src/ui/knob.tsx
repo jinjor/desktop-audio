@@ -1,13 +1,59 @@
 import React, { useEffect, useState } from "react";
 
-export const Knob = (o: {
+const Tooptip = (o: {
+  text: string;
+  position: { x: number; y: number } | null;
+}) => {
+  if (o.position == null) {
+    return null;
+  }
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: `${o.position.x + 10}px`,
+        top: `${o.position.y + 15}px`,
+        border: "solid 1px #aaa",
+        backgroundColor: "#444",
+        zIndex: 1,
+        padding: "1px 2px",
+      }}
+    >
+      {o.text}
+    </div>
+  );
+};
+
+type LabeledKnobOptions = KnobOptions & {
+  label: string;
+};
+
+export const LabeledKnob = (o: LabeledKnobOptions) => {
+  const { label, ...knobOptions } = o;
+  return (
+    <div style={{ textAlign: "center" }}>
+      <div>
+        <Knob {...knobOptions} />
+      </div>
+      <label style={{ fontSize: "12px" }}>{label}</label>
+    </div>
+  );
+};
+
+type KnobOptions = {
   exponential: boolean;
   min: number;
   max: number;
   value: number;
   steps: number | null;
   onInput: (value: number) => void;
-}) => {
+};
+
+export const Knob = (o: KnobOptions) => {
+  const [mousePosition, setMousePosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const size = 40;
   const v = (o.value - o.min) / (o.max - o.min);
   const onInput = (v: number) => {
@@ -18,7 +64,9 @@ export const Knob = (o: {
       value={v}
       steps={o.steps}
       onInput={onInput}
+      onHold={setMousePosition}
       style={{
+        display: "inline-block",
         width: `${size}px`,
         height: `${size}px`,
         position: "relative",
@@ -26,6 +74,7 @@ export const Knob = (o: {
       }}
     >
       <KnobView size={size} value={v} />
+      <Tooptip text={o.value.toFixed(1)} position={mousePosition} />
     </KnobHandler>
   );
 };
@@ -84,6 +133,8 @@ const KnobView = (o: { size: number; value: number }) => {
       <svg
         style={{
           position: "absolute",
+          top: "0",
+          left: "0",
           width: `${size}px`,
           height: `${size}px`,
         }}
@@ -107,18 +158,27 @@ const KnobHandler = (o: {
   value: number;
   steps: number | null;
   children: any;
+  onHold: (
+    data: {
+      x: number;
+      y: number;
+    } | null
+  ) => void;
   onInput: (value: number) => void;
 }) => {
-  const { value, steps, children, onInput, ...props } = o;
-  const valuePerX = 1 / 200;
-  const valuePerY = 1 / 200;
+  const { value, steps, children, onHold, onInput, ...props } = o;
+  const valuePerX = 1 / 100;
+  const valuePerY = 1 / 100;
   const [start, setStart] = useState<{
     x: number;
     y: number;
     value: number;
   } | null>(null);
   const onMouseDown = (e: React.MouseEvent) => {
-    setStart({ x: e.clientX, y: e.clientY, value });
+    const x = e.clientX;
+    const y = e.clientY;
+    setStart({ x, y, value });
+    onHold({ x, y });
   };
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -132,10 +192,10 @@ const KnobHandler = (o: {
       if (steps != null) {
         v = Math.floor(v * steps) / steps;
       }
-      if (v === value) {
-        return;
+      onHold({ x, y });
+      if (v !== value) {
+        onInput(v);
       }
-      onInput(v);
     };
     window.addEventListener("mousemove", onMouseMove);
     return () => window.removeEventListener("mousemove", onMouseMove);
@@ -146,6 +206,7 @@ const KnobHandler = (o: {
         return;
       }
       setStart(null);
+      onHold(null);
     };
     window.addEventListener("mouseup", onMouseUp);
     return () => window.removeEventListener("mouseup", onMouseUp);

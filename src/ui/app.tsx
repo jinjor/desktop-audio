@@ -2,7 +2,7 @@ import { ipcRenderer } from "electron";
 import ReactDOM from "react-dom";
 import React, { useState, useEffect, useRef } from "react";
 import { Notes } from "./note";
-import { Knob } from "./knob";
+import { LabeledKnob } from "./knob";
 
 const MonoPolySelect: React.FC = () => {
   const onChange = (e: any) => {
@@ -41,17 +41,15 @@ const Attack: React.FC = () => {
     setValue(value);
   };
   return (
-    <div>
-      <Knob
-        min={0}
-        max={400}
-        steps={400}
-        exponential={true}
-        value={value}
-        onInput={onInput}
-      />
-      <label>Attack</label>
-    </div>
+    <LabeledKnob
+      min={0}
+      max={400}
+      steps={400}
+      exponential={true}
+      value={value}
+      onInput={onInput}
+      label="Attack"
+    />
   );
 };
 const Decay: React.FC = () => {
@@ -61,17 +59,15 @@ const Decay: React.FC = () => {
     setValue(value);
   };
   return (
-    <div>
-      <Knob
-        min={0}
-        max={400}
-        steps={400}
-        exponential={true}
-        value={value}
-        onInput={onInput}
-      />
-      <label>Decay</label>
-    </div>
+    <LabeledKnob
+      min={0}
+      max={400}
+      steps={400}
+      exponential={true}
+      value={value}
+      onInput={onInput}
+      label="Decay"
+    />
   );
 };
 
@@ -82,17 +78,15 @@ const Sustain: React.FC = () => {
     setValue(value);
   };
   return (
-    <div>
-      <Knob
-        min={0}
-        max={1}
-        steps={400}
-        exponential={false}
-        value={value}
-        onInput={onInput}
-      />
-      <label>Sustain</label>
-    </div>
+    <LabeledKnob
+      min={0}
+      max={1}
+      steps={400}
+      exponential={false}
+      value={value}
+      onInput={onInput}
+      label="Sustain"
+    />
   );
 };
 
@@ -103,17 +97,15 @@ const Release: React.FC = () => {
     setValue(value);
   };
   return (
-    <div>
-      <Knob
-        min={0}
-        max={800}
-        steps={400}
-        exponential={true}
-        value={value}
-        onInput={onInput}
-      />
-      <label>Release</label>
-    </div>
+    <LabeledKnob
+      min={0}
+      max={800}
+      steps={400}
+      exponential={true}
+      value={value}
+      onInput={onInput}
+      label="Release"
+    />
   );
 };
 
@@ -148,17 +140,15 @@ const FilterFreq: React.FC = () => {
     setValue(value);
   };
   return (
-    <div>
-      <Knob
-        min={30}
-        max={20000}
-        steps={400}
-        exponential={true}
-        value={value}
-        onInput={onInput}
-      />
-      <label>Freq</label>
-    </div>
+    <LabeledKnob
+      min={30}
+      max={20000}
+      steps={400}
+      exponential={true}
+      value={value}
+      onInput={onInput}
+      label="Freq"
+    />
   );
 };
 
@@ -169,17 +159,15 @@ const FilterQ: React.FC = () => {
     setValue(value);
   };
   return (
-    <div>
-      <Knob
-        min={0}
-        max={20}
-        steps={400}
-        exponential={false}
-        value={value}
-        onInput={onInput}
-      />
-      <label>Q</label>
-    </div>
+    <LabeledKnob
+      min={0}
+      max={20}
+      steps={400}
+      exponential={false}
+      value={value}
+      onInput={onInput}
+      label="Q"
+    />
   );
 };
 
@@ -190,17 +178,15 @@ const FilterGain: React.FC = () => {
     setValue(value);
   };
   return (
-    <div>
-      <Knob
-        min={-40}
-        max={40}
-        steps={400}
-        exponential={false}
-        value={value}
-        onInput={onInput}
-      />
-      <label>Gain</label>
-    </div>
+    <LabeledKnob
+      min={-40}
+      max={40}
+      steps={400}
+      exponential={false}
+      value={value}
+      onInput={onInput}
+      label="Gain"
+    />
   );
 };
 
