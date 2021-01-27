@@ -202,7 +202,7 @@ func (o *osc) calcEach(pos int64) float64 {
 			return 1
 		}
 		return -1
-	case "pluse":
+	case "pulse":
 		length := int64(float64(sampleRate) / float64(o.freq))
 		if pos%length < length/4 {
 			return 1
