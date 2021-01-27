@@ -9,7 +9,7 @@ export const Knob = (o: {
   onInput: (value: number) => void;
 }) => {
   const size = 40;
-  const v = o.value / (o.max - o.min);
+  const v = (o.value - o.min) / (o.max - o.min);
   const onInput = (v: number) => {
     o.onInput(o.min + (o.max - o.min) * v);
   };
