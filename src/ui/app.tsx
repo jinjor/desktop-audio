@@ -3,38 +3,50 @@ import ReactDOM from "react-dom";
 import React, { useState, useEffect, useRef } from "react";
 import { Notes } from "./note";
 import { LabeledKnob } from "./knob";
+import { Radio } from "./radio";
 
-const MonoPolySelect: React.FC = () => {
-  const onChange = (e: any) => {
-    const value = e.target.value;
-    ipcRenderer.send("audio", [value]);
-  };
+const EditGroup = (o: { label: string; children: any }) => {
   return (
-    <select onChange={onChange}>
-      <option>mono</option>
-      <option>poly</option>
-    </select>
+    <div style={{ display: "flex", flexFlow: "column" }}>
+      <label
+        style={{
+          display: "block",
+          borderBottom: "solid 1px #aaa",
+          textAlign: "center",
+        }}
+      >
+        {o.label}
+      </label>
+      <div style={{ padding: "5px 0" }}>{o.children}</div>
+    </div>
   );
 };
 
-const WaveSelect: React.FC = () => {
-  const onChange = (e: any) => {
-    const value = e.target.value;
+const MonoPolySelect = () => {
+  const [value, setValue] = useState("mono");
+  const onChange = (value: string) => {
+    setValue(value);
+    ipcRenderer.send("audio", [value]);
+  };
+  return <Radio list={["mono", "poly"]} value={value} onChange={onChange} />;
+};
+
+const WaveSelect = () => {
+  const [value, setValue] = useState("sine");
+  const onChange = (value: string) => {
+    setValue(value);
     ipcRenderer.send("audio", ["set", "osc", "kind", value]);
   };
   return (
-    <select onChange={onChange}>
-      <option>sine</option>
-      <option>triangle</option>
-      <option>square</option>
-      <option>pluse</option>
-      <option>saw</option>
-      <option>noise</option>
-    </select>
+    <Radio
+      list={["sine", "triangle", "square", "pulse", "saw", "noise"]}
+      value={value}
+      onChange={onChange}
+    />
   );
 };
 
-const Attack: React.FC = () => {
+const Attack = () => {
   const [value, setValue] = useState(10);
   const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "attack", value]);
@@ -47,12 +59,12 @@ const Attack: React.FC = () => {
       steps={400}
       exponential={true}
       value={value}
-      onInput={onInput}
+      onChange={onInput}
       label="Attack"
     />
   );
 };
-const Decay: React.FC = () => {
+const Decay = () => {
   const [value, setValue] = useState(100);
   const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "decay", value]);
@@ -65,13 +77,13 @@ const Decay: React.FC = () => {
       steps={400}
       exponential={true}
       value={value}
-      onInput={onInput}
+      onChange={onInput}
       label="Decay"
     />
   );
 };
 
-const Sustain: React.FC = () => {
+const Sustain = () => {
   const [value, setValue] = useState(0.7);
   const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "sustain", value]);
@@ -84,13 +96,13 @@ const Sustain: React.FC = () => {
       steps={400}
       exponential={false}
       value={value}
-      onInput={onInput}
+      onChange={onInput}
       label="Sustain"
     />
   );
 };
 
-const Release: React.FC = () => {
+const Release = () => {
   const [value, setValue] = useState(200);
   const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "adsr", "release", value]);
@@ -103,37 +115,40 @@ const Release: React.FC = () => {
       steps={400}
       exponential={true}
       value={value}
-      onInput={onInput}
+      onChange={onInput}
       label="Release"
     />
   );
 };
 
-const FilterSelect: React.FC = () => {
-  const onChange = (e: any) => {
-    const value = e.target.value;
+const FilterSelect = () => {
+  const [value, setValue] = useState("none");
+  const onChange = (value: string) => {
+    setValue(value);
     ipcRenderer.send("audio", ["set", "filter", "kind", value]);
   };
   return (
-    <div>
-      <select onChange={onChange}>
-        <option>none</option>
-        <option>lowpass-fir</option>
-        <option>highpass-fir</option>
-        <option>lowpass</option>
-        <option>highpass</option>
-        <option>bandpass-1</option>
-        <option>bandpass-2</option>
-        <option>notch</option>
-        <option>peaking</option>
-        <option>lowshelf</option>
-        <option>highshelf</option>
-      </select>
-    </div>
+    <Radio
+      list={[
+        "none",
+        "lowpass-fir",
+        "highpass-fir",
+        "lowpass",
+        "highpass",
+        "bandpass-1",
+        "bandpass-2",
+        "notch",
+        "peaking",
+        "lowshelf",
+        "highshelf",
+      ]}
+      value={value}
+      onChange={onChange}
+    />
   );
 };
 
-const FilterFreq: React.FC = () => {
+const FilterFreq = () => {
   const [value, setValue] = useState(1000);
   const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "filter", "freq", value]);
@@ -146,13 +161,13 @@ const FilterFreq: React.FC = () => {
       steps={400}
       exponential={true}
       value={value}
-      onInput={onInput}
+      onChange={onInput}
       label="Freq"
     />
   );
 };
 
-const FilterQ: React.FC = () => {
+const FilterQ = () => {
   const [value, setValue] = useState(0);
   const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "filter", "q", value]);
@@ -165,13 +180,13 @@ const FilterQ: React.FC = () => {
       steps={400}
       exponential={false}
       value={value}
-      onInput={onInput}
+      onChange={onInput}
       label="Q"
     />
   );
 };
 
-const FilterGain: React.FC = () => {
+const FilterGain = () => {
   const [value, setValue] = useState(0);
   const onInput = (value: number) => {
     ipcRenderer.send("audio", ["set", "filter", "gain", value]);
@@ -184,7 +199,7 @@ const FilterGain: React.FC = () => {
       steps={400}
       exponential={false}
       value={value}
-      onInput={onInput}
+      onChange={onInput}
       label="Gain"
     />
   );
@@ -298,21 +313,33 @@ const App = () => {
   }, []);
   return (
     <React.Fragment>
-      <MonoPolySelect />
-      <WaveSelect />
-      <div style={{ display: "flex" }}>
-        <div>
-          <Attack />
-          <Decay />
-          <Sustain />
-          <Release />
-        </div>
-        <div>
-          <FilterSelect />
-          <FilterFreq />
-          <FilterQ />
-          <FilterGain />
-        </div>
+      <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
+        <EditGroup label="POLY">
+          <MonoPolySelect />
+        </EditGroup>
+        <EditGroup label="WAVE">
+          <WaveSelect />
+        </EditGroup>
+        <EditGroup label="EG">
+          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+            <Attack />
+            <Decay />
+            <Sustain />
+            <Release />
+          </div>
+        </EditGroup>
+        <EditGroup label="FILTER">
+          <div style={{ display: "flex", gap: "12px" }}>
+            <div>
+              <FilterSelect />
+            </div>
+            <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+              <FilterFreq />
+              <FilterQ />
+              <FilterGain />
+            </div>
+          </div>
+        </EditGroup>
       </div>
       <Notes />
       <Spectrum />

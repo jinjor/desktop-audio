@@ -31,10 +31,8 @@ type LabeledKnobOptions = KnobOptions & {
 export const LabeledKnob = (o: LabeledKnobOptions) => {
   const { label, ...knobOptions } = o;
   return (
-    <div style={{ textAlign: "center" }}>
-      <div>
-        <Knob {...knobOptions} />
-      </div>
+    <div style={{ display: "flex", flexFlow: "column", textAlign: "center" }}>
+      <Knob {...knobOptions} />
       <label style={{ fontSize: "12px" }}>{label}</label>
     </div>
   );
@@ -46,7 +44,7 @@ type KnobOptions = {
   max: number;
   value: number;
   steps: number | null;
-  onInput: (value: number) => void;
+  onChange: (value: number) => void;
 };
 
 export const Knob = (o: KnobOptions) => {
@@ -57,7 +55,7 @@ export const Knob = (o: KnobOptions) => {
   const size = 40;
   const v = (o.value - o.min) / (o.max - o.min);
   const onInput = (v: number) => {
-    o.onInput(o.min + (o.max - o.min) * v);
+    o.onChange(o.min + (o.max - o.min) * v);
   };
   return (
     <KnobHandler
