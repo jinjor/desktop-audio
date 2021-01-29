@@ -66,14 +66,13 @@ func newMonoOsc() *monoOsc {
 }
 
 func (m *monoOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, adsrParams *adsrParams) {
-	m.osc.init(oscParams)
 	m.adsr.setParams(adsrParams)
 	for i := int64(0); i < int64(len(m.out)); i++ {
 		m.out[i] = 0
 		for _, e := range events[i] {
 			switch data := e.event.(type) {
 			case *noteOn:
-				m.osc.freq = 442 * math.Pow(2, float64(data.note-69)/12)
+				m.osc.initWithNote(oscParams, data.note)
 				m.adsr.noteOn()
 			case *noteOff:
 				m.adsr.noteOff()
@@ -120,9 +119,8 @@ func (p *polyOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, a
 					p.pooled = p.pooled[:lenPooled-1]
 					p.active = append(p.active, o)
 					o.note = data.note
-					o.osc.init(oscParams)
+					o.osc.initWithNote(oscParams, data.note)
 					o.adsr.init(adsrParams)
-					o.osc.freq = 442 * math.Pow(2, float64(data.note-69)/12)
 				} else {
 					log.Println("maxPoly exceeded")
 				}
@@ -164,13 +162,34 @@ type oscWithADSR struct {
 // ----- OSC ----- //
 
 type oscParams struct {
-	kind string
+	kind   string
+	octave int // -2 ~ 2
+	coarse int // -12 ~ 12
+	fine   int // -100 ~ 100 cent
 }
 
 func (o *oscParams) set(key string, value string) error {
 	switch key {
 	case "kind":
 		o.kind = value
+	case "octave":
+		value, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+		o.octave = int(value)
+	case "coarse":
+		value, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+		o.coarse = int(value)
+	case "fine":
+		value, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+		o.fine = int(value)
 	}
 	return nil
 }
@@ -181,8 +200,9 @@ type osc struct {
 	out  []float64 // length: samplesPerCycle
 }
 
-func (o *osc) init(p *oscParams) {
+func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
+	o.freq = 442 * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
 }
 
 func (o *osc) calcEach(pos int64) float64 {

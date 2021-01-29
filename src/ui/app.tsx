@@ -45,7 +45,69 @@ const WaveSelect = () => {
     />
   );
 };
-
+const Octave = () => {
+  const [value, setValue] = useState(0);
+  const onInput = (value: number) => {
+    ipcRenderer.send("audio", ["set", "osc", "octave", value]);
+    setValue(value);
+  };
+  const min = -2;
+  const max = 2;
+  const steps = max - min + 1;
+  return (
+    <LabeledKnob
+      min={min}
+      max={max}
+      steps={steps}
+      exponential={true}
+      value={value}
+      onChange={onInput}
+      label="Octave"
+    />
+  );
+};
+const Coarse = () => {
+  const [value, setValue] = useState(0);
+  const onInput = (value: number) => {
+    ipcRenderer.send("audio", ["set", "osc", "coarse", value]);
+    setValue(value);
+  };
+  const min = -12;
+  const max = 12;
+  const steps = max - min + 1;
+  return (
+    <LabeledKnob
+      min={min}
+      max={max}
+      steps={steps}
+      exponential={true}
+      value={value}
+      onChange={onInput}
+      label="Coarse"
+    />
+  );
+};
+const Fine = () => {
+  const [value, setValue] = useState(0);
+  const onInput = (value: number) => {
+    ipcRenderer.send("audio", ["set", "osc", "fine", value]);
+    setValue(value);
+  };
+  const min = -100;
+  const max = 100;
+  const steps = max - min + 1;
+  return (
+    <LabeledKnob
+      min={min}
+      max={max}
+      steps={steps}
+      exponential={true}
+      value={value}
+      onChange={onInput}
+      label="Fine"
+    />
+  );
+};
 const Attack = () => {
   const [value, setValue] = useState(10);
   const onInput = (value: number) => {
@@ -317,8 +379,17 @@ const App = () => {
         <EditGroup label="POLY">
           <MonoPolySelect />
         </EditGroup>
-        <EditGroup label="WAVE">
-          <WaveSelect />
+        <EditGroup label="OSC">
+          <div style={{ display: "flex", gap: "12px" }}>
+            <div>
+              <WaveSelect />
+            </div>
+            <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+              <Octave />
+              <Coarse />
+              <Fine />
+            </div>
+          </div>
         </EditGroup>
         <EditGroup label="EG">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
