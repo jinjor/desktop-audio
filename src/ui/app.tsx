@@ -59,6 +59,7 @@ const Octave = () => {
       min={min}
       max={max}
       steps={steps}
+      from={0}
       exponential={true}
       value={value}
       onChange={onInput}
@@ -82,6 +83,7 @@ const Coarse = () => {
       steps={steps}
       exponential={true}
       value={value}
+      from={0}
       onChange={onInput}
       label="Coarse"
     />
@@ -103,6 +105,7 @@ const Fine = () => {
       steps={steps}
       exponential={true}
       value={value}
+      from={0}
       onChange={onInput}
       label="Fine"
     />
@@ -261,6 +264,7 @@ const FilterGain = () => {
       steps={400}
       exponential={false}
       value={value}
+      from={0}
       onChange={onInput}
       label="Gain"
     />

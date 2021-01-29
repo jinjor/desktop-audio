@@ -44,6 +44,7 @@ type KnobOptions = {
   max: number;
   value: number;
   steps: number | null;
+  from?: number;
   onChange: (value: number) => void;
 };
 
@@ -54,6 +55,7 @@ export const Knob = (o: KnobOptions) => {
   } | null>(null);
   const size = 40;
   const v = (o.value - o.min) / (o.max - o.min);
+  const from = ((o.from ?? o.min) - o.min) / (o.max - o.min);
   const onInput = (v: number) => {
     o.onChange(o.min + (o.max - o.min) * v);
   };
@@ -71,40 +73,47 @@ export const Knob = (o: KnobOptions) => {
         userSelect: "none",
       }}
     >
-      <KnobView size={size} value={v} />
+      <KnobView size={size} value={v} from={from} />
       <Tooptip text={o.value.toFixed(1)} position={mousePosition} />
     </KnobHandler>
   );
 };
 
-const KnobView = (o: { size: number; value: number }) => {
-  const { size, value } = o;
+const KnobView = (o: { size: number; value: number; from: number }) => {
+  const { size, value, from } = o;
   const knobR = 15;
   const knobSize = knobR * 2;
   const knobOffset = (size - knobR * 2) / 2;
   const pointD = 11;
   const pointR = 2;
-  const startRad = Math.PI * (-4 / 3);
-  const endRad = Math.PI * (1 / 3);
-  const valueRad = value * endRad + (1 - value) * startRad;
+  const minRad = Math.PI * (-4 / 3);
+  const maxRad = Math.PI * (1 / 3);
+  const fromRad = from * maxRad + (1 - from) * minRad;
+  const valueRad = value * maxRad + (1 - value) * minRad;
   const slitWidth = 2;
   const slitR = knobR + 2 + slitWidth / 2;
-  const startX = slitR * Math.cos(startRad);
-  const startY = slitR * Math.sin(startRad);
-  const endX = slitR * Math.cos(endRad);
-  const endY = slitR * Math.sin(endRad);
+  const minX = slitR * Math.cos(minRad);
+  const minY = slitR * Math.sin(minRad);
+  const maxX = slitR * Math.cos(maxRad);
+  const maxY = slitR * Math.sin(maxRad);
+  const fromX = slitR * Math.cos(fromRad);
+  const fromY = slitR * Math.sin(fromRad);
   const valueX = slitR * Math.cos(valueRad);
   const valueY = slitR * Math.sin(valueRad);
   const pointX = pointD * Math.cos(valueRad);
   const pointY = pointD * Math.sin(valueRad);
   const slitColor = "#97f";
-  const largeArc = valueRad - startRad >= Math.PI ? 1 : 0;
+  const largeArc = Math.abs(valueRad - fromRad) >= Math.PI ? 1 : 0;
+  const sweep = fromRad < valueRad ? 1 : 0;
   if (slitR * 2 + slitWidth > size) {
     throw new Error("assertion error");
   }
   const Path = (o: {
+    startX: number;
+    startY: number;
     endX: number;
     endY: number;
+    sweep: number;
     largeArc: number;
     color: string;
   }) => (
@@ -112,7 +121,7 @@ const KnobView = (o: { size: number; value: number }) => {
       stroke={o.color}
       strokeWidth={slitWidth}
       fill="none"
-      d={`M ${startX} ${startY} A ${slitR} ${slitR} 0 ${o.largeArc} 1 ${o.endX} ${o.endY}`}
+      d={`M ${o.startX} ${o.startY} A ${slitR} ${slitR} 0 ${o.largeArc} ${o.sweep} ${o.endX} ${o.endY}`}
     />
   );
   return (
@@ -138,11 +147,22 @@ const KnobView = (o: { size: number; value: number }) => {
         }}
         viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`}
       >
-        <Path endX={endX} endY={endY} largeArc={1} color="#000" />
         <Path
+          startX={minX}
+          startY={minY}
+          endX={maxX}
+          endY={maxY}
+          largeArc={1}
+          sweep={1}
+          color="#000"
+        />
+        <Path
+          startX={fromX}
+          startY={fromY}
           endX={valueX}
           endY={valueY}
           largeArc={largeArc}
+          sweep={sweep}
           color={slitColor}
         />
         <circle r={pointR} cx={pointX} cy={pointY} fill={slitColor} />
