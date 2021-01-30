@@ -67,7 +67,7 @@ func newMonoOsc() *monoOsc {
 	}
 }
 
-func (m *monoOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, adsrParams *adsrParams) {
+func (m *monoOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, adsrParams *adsrParams, glideTime int) {
 	m.adsr.setParams(adsrParams)
 	for i := int64(0); i < int64(len(m.out)); i++ {
 		m.out[i] = 0
@@ -83,7 +83,7 @@ func (m *monoOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, a
 					if len(m.activeNotes) == 1 {
 						m.osc.initWithNote(oscParams, data.note)
 					} else {
-						m.osc.shiftNote(oscParams, m.activeNotes[0])
+						m.osc.glide(oscParams, m.activeNotes[0], glideTime)
 					}
 					m.adsr.noteOn()
 				}
@@ -98,7 +98,7 @@ func (m *monoOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, a
 				}
 				m.activeNotes = m.activeNotes[:len(m.activeNotes)-removed]
 				if len(m.activeNotes) > 0 {
-					m.osc.shiftNote(oscParams, m.activeNotes[0])
+					m.osc.glide(oscParams, m.activeNotes[0], glideTime)
 				} else {
 					m.adsr.noteOff()
 				}
@@ -188,11 +188,10 @@ type oscWithADSR struct {
 // ----- OSC ----- //
 
 type oscParams struct {
-	kind           string
-	portamentoTime int // ms
-	octave         int // -2 ~ 2
-	coarse         int // -12 ~ 12
-	fine           int // -100 ~ 100 cent
+	kind   string
+	octave int // -2 ~ 2
+	coarse int // -12 ~ 12
+	fine   int // -100 ~ 100 cent
 }
 
 func (o *oscParams) set(key string, value string) error {
@@ -222,14 +221,14 @@ func (o *oscParams) set(key string, value string) error {
 }
 
 type osc struct {
-	kind           string
-	portamentoTime int // ms
-	freq           float64
-	phase01        float64
-	shiftPos       float64
-	prevFreq       float64
-	nextFreq       float64
-	out            []float64 // length: samplesPerCycle
+	kind      string
+	glideTime int // ms
+	freq      float64
+	phase01   float64
+	shiftPos  float64
+	prevFreq  float64
+	nextFreq  float64
+	out       []float64 // length: samplesPerCycle
 }
 
 func noteToFreq(p *oscParams, note int) float64 {
@@ -237,17 +236,17 @@ func noteToFreq(p *oscParams, note int) float64 {
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
-	o.portamentoTime = p.portamentoTime
 	o.freq = noteToFreq(p, note)
 }
-func (o *osc) shiftNote(p *oscParams, note int) {
+func (o *osc) glide(p *oscParams, note int, glideTime int) {
+	o.glideTime = glideTime
 	o.prevFreq = o.freq
 	o.nextFreq = noteToFreq(p, note)
 	o.shiftPos = 1
 }
 func (o *osc) calcEach(pos int64) float64 {
 	if o.shiftPos > 0 {
-		t := o.shiftPos * secPerSample * 1000 / float64(o.portamentoTime)
+		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
 		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
 		if t >= 1 {
 			o.shiftPos = 0
@@ -601,6 +600,7 @@ type state struct {
 	oscParams  *oscParams
 	adsrParams *adsrParams
 	polyMode   bool
+	glideTime  int // ms
 	monoOsc    *monoOsc
 	polyOsc    *polyOsc
 	filter     *filter
@@ -626,7 +626,7 @@ func (a *Audio) Read(buf []byte) (int, error) {
 			a.state.polyOsc.calc(a.state.pos, a.state.events, a.state.oscParams, a.state.adsrParams)
 			a.state.filter.process(a.state.polyOsc.out, out)
 		} else {
-			a.state.monoOsc.calc(a.state.pos, a.state.events, a.state.oscParams, a.state.adsrParams)
+			a.state.monoOsc.calc(a.state.pos, a.state.events, a.state.oscParams, a.state.adsrParams, a.state.glideTime)
 			a.state.filter.process(a.state.monoOsc.out, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
@@ -675,9 +675,10 @@ func NewAudio() (*Audio, error) {
 		CommandCh:  commandCh,
 		state: &state{
 			events:     make([][]*midiEvent, samplesPerCycle*2),
-			oscParams:  &oscParams{kind: "sine", portamentoTime: 100},
+			oscParams:  &oscParams{kind: "sine"},
 			adsrParams: &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 			polyMode:   false,
+			glideTime:  100,
 			monoOsc:    newMonoOsc(),
 			polyOsc:    newPolyOsc(),
 			filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
@@ -708,24 +709,40 @@ func (a *Audio) update(command []string) {
 	case "set":
 		command = command[1:]
 		switch command[0] {
+		case "glide_time":
+			command = command[1:]
+			value, err := strconv.ParseInt(command[0], 10, 64)
+			if err != nil {
+				panic(err)
+			}
+			a.state.glideTime = int(value)
 		case "osc":
 			command = command[1:]
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			a.state.oscParams.set(command[0], command[1])
+			err := a.state.oscParams.set(command[0], command[1])
+			if err != nil {
+				panic(err)
+			}
 		case "adsr":
 			command = command[1:]
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			a.state.adsrParams.set(command[0], command[1])
+			err := a.state.adsrParams.set(command[0], command[1])
+			if err != nil {
+				panic(err)
+			}
 		case "filter":
 			command = command[1:]
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			a.state.filter.set(command[0], command[1])
+			err := a.state.filter.set(command[0], command[1])
+			if err != nil {
+				panic(err)
+			}
 			a.Changes.Add("filter-shape")
 		}
 	case "mono":

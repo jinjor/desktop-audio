@@ -30,7 +30,28 @@ const MonoPolySelect = () => {
   };
   return <Radio list={["mono", "poly"]} value={value} onChange={onChange} />;
 };
-
+const GlideTime = () => {
+  const [value, setValue] = useState(100);
+  const onInput = (value: number) => {
+    ipcRenderer.send("audio", ["set", "glide_time", value]);
+    setValue(value);
+  };
+  const min = 1;
+  const max = 400;
+  const steps = max - min + 1;
+  return (
+    <LabeledKnob
+      min={min}
+      max={max}
+      steps={steps}
+      from={0}
+      exponential={true}
+      value={value}
+      onChange={onInput}
+      label="Glide"
+    />
+  );
+};
 const WaveSelect = () => {
   const [value, setValue] = useState("sine");
   const onChange = (value: string) => {
@@ -381,7 +402,10 @@ const App = () => {
     <React.Fragment>
       <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
         <EditGroup label="POLY">
-          <MonoPolySelect />
+          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+            <MonoPolySelect />
+            <GlideTime />
+          </div>
         </EditGroup>
         <EditGroup label="OSC">
           <div style={{ display: "flex", gap: "12px" }}>
