@@ -52,16 +52,18 @@ type noteOff struct {
 // ----- MONO OSC ----- //
 
 type monoOsc struct {
-	osc  *osc
-	adsr *adsr
-	out  []float64 // length: samplesPerCycle
+	osc         *osc
+	adsr        *adsr
+	activeNotes []int
+	out         []float64 // length: samplesPerCycle
 }
 
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
-		osc:  &osc{},
-		adsr: &adsr{},
-		out:  make([]float64, samplesPerCycle),
+		osc:         &osc{},
+		adsr:        &adsr{},
+		activeNotes: make([]int, 0, 128),
+		out:         make([]float64, samplesPerCycle),
 	}
 }
 
@@ -72,10 +74,34 @@ func (m *monoOsc) calc(pos int64, events [][]*midiEvent, oscParams *oscParams, a
 		for _, e := range events[i] {
 			switch data := e.event.(type) {
 			case *noteOn:
-				m.osc.initWithNote(oscParams, data.note)
-				m.adsr.noteOn()
+				if len(m.activeNotes) < cap(m.activeNotes) {
+					m.activeNotes = m.activeNotes[:len(m.activeNotes)+1]
+					for i := len(m.activeNotes) - 1; i >= 1; i-- {
+						m.activeNotes[i] = m.activeNotes[i-1]
+					}
+					m.activeNotes[0] = data.note
+					if len(m.activeNotes) == 1 {
+						m.osc.initWithNote(oscParams, data.note)
+					} else {
+						m.osc.shiftNote(oscParams, m.activeNotes[0])
+					}
+					m.adsr.noteOn()
+				}
 			case *noteOff:
-				m.adsr.noteOff()
+				removed := 0
+				for i := 0; i < len(m.activeNotes); i++ {
+					if m.activeNotes[i] == data.note {
+						removed++
+					} else {
+						m.activeNotes[i-removed] = m.activeNotes[i]
+					}
+				}
+				m.activeNotes = m.activeNotes[:len(m.activeNotes)-removed]
+				if len(m.activeNotes) > 0 {
+					m.osc.shiftNote(oscParams, m.activeNotes[0])
+				} else {
+					m.adsr.noteOff()
+				}
 			}
 		}
 		m.adsr.step()
@@ -162,10 +188,11 @@ type oscWithADSR struct {
 // ----- OSC ----- //
 
 type oscParams struct {
-	kind   string
-	octave int // -2 ~ 2
-	coarse int // -12 ~ 12
-	fine   int // -100 ~ 100 cent
+	kind           string
+	portamentoTime int // ms
+	octave         int // -2 ~ 2
+	coarse         int // -12 ~ 12
+	fine           int // -100 ~ 100 cent
 }
 
 func (o *oscParams) set(key string, value string) error {
@@ -195,42 +222,63 @@ func (o *oscParams) set(key string, value string) error {
 }
 
 type osc struct {
-	kind string
-	freq float64
-	out  []float64 // length: samplesPerCycle
+	kind           string
+	portamentoTime int // ms
+	freq           float64
+	phase01        float64
+	shiftPos       float64
+	prevFreq       float64
+	nextFreq       float64
+	out            []float64 // length: samplesPerCycle
 }
 
+func noteToFreq(p *oscParams, note int) float64 {
+	return 442 * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
+}
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
-	o.freq = 442 * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
+	o.portamentoTime = p.portamentoTime
+	o.freq = noteToFreq(p, note)
 }
-
+func (o *osc) shiftNote(p *oscParams, note int) {
+	o.prevFreq = o.freq
+	o.nextFreq = noteToFreq(p, note)
+	o.shiftPos = 1
+}
 func (o *osc) calcEach(pos int64) float64 {
+	if o.shiftPos > 0 {
+		t := o.shiftPos * secPerSample * 1000 / float64(o.portamentoTime)
+		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
+		if t >= 1 {
+			o.shiftPos = 0
+		} else {
+			o.shiftPos++
+		}
+	}
+	o.phase01 += o.freq / float64(sampleRate)
+	if o.phase01 > 1 {
+		o.phase01 -= 1.0
+	}
 	switch o.kind {
 	case "sine":
-		length := float64(sampleRate) / float64(o.freq)
-		return math.Sin(2 * math.Pi * float64(pos) / length)
+		return math.Sin(2 * math.Pi * o.phase01)
 	case "triangle":
-		length := int64(float64(sampleRate) / float64(o.freq))
-		if pos%length < length/2 {
-			return float64(pos%length)/float64(length)*4 - 1
+		if o.phase01 < 0.5 {
+			return o.phase01*4 - 1
 		}
-		return float64(pos%length)/float64(length)*(-4) + 3
+		return o.phase01*(-4) + 3
 	case "square":
-		length := int64(float64(sampleRate) / float64(o.freq))
-		if pos%length < length/2 {
+		if o.phase01 < 0.5 {
 			return 1
 		}
 		return -1
 	case "pulse":
-		length := int64(float64(sampleRate) / float64(o.freq))
-		if pos%length < length/4 {
+		if o.phase01 < 0.25 {
 			return 1
 		}
 		return -1
 	case "saw":
-		length := int64(float64(sampleRate) / float64(o.freq))
-		return float64(pos%length)/float64(length)*2 - 1
+		return o.phase01*2 - 1
 	case "noise":
 		return rand.Float64()*2 - 1
 	}
@@ -284,6 +332,7 @@ type adsr struct {
 	value        float64
 	phase        string // "attack", "decay", "sustain", "release" nil
 	phasePos     int
+	attackValue  float64
 	releaseValue float64
 }
 
@@ -292,6 +341,7 @@ func (a *adsr) init(p *adsrParams) {
 	a.value = 0
 	a.phase = ""
 	a.phasePos = 0
+	a.attackValue = 0
 	a.releaseValue = 0
 }
 
@@ -318,11 +368,9 @@ func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
 }
 
 func (a *adsr) noteOn() {
-	if a.phase == "" {
-		a.phase = "attack"
-		a.phasePos = 0
-		a.value = 0
-	}
+	a.phase = "attack"
+	a.phasePos = 0
+	a.attackValue = a.value
 }
 
 func (a *adsr) noteOff() {
@@ -332,11 +380,12 @@ func (a *adsr) noteOff() {
 }
 
 func (a *adsr) step() {
-	t := float64(a.phasePos) * secPerSample * 1000 // ms
+	phaseTime := float64(a.phasePos) * secPerSample * 1000 // ms
 	switch a.phase {
 	case "attack":
-		a.value = t / float64(a.attack)
-		if t >= float64(a.attack) {
+		t := phaseTime / float64(a.attack)
+		a.value = t*1 + (1-t)*a.attackValue
+		if t >= 1 {
 			a.phase = "decay"
 			a.phasePos = 0
 			a.value = 1
@@ -344,7 +393,8 @@ func (a *adsr) step() {
 			a.phasePos++
 		}
 	case "decay":
-		a.value = setTargetAtTime(1.0, a.sustain, t/float64(a.decay))
+		t := phaseTime / float64(a.decay)
+		a.value = setTargetAtTime(1.0, a.sustain, t)
 		if a.value-a.sustain < 0.001 {
 			a.phase = "sustain"
 			a.phasePos = 0
@@ -355,7 +405,8 @@ func (a *adsr) step() {
 	case "sustain":
 		a.value = float64(a.sustain)
 	case "release":
-		a.value = setTargetAtTime(a.releaseValue, 0.0, t/float64(a.release))
+		t := phaseTime / float64(a.release)
+		a.value = setTargetAtTime(a.releaseValue, 0.0, t)
 		if a.value < 0.001 {
 			a.phase = ""
 			a.phasePos = 0
@@ -624,7 +675,7 @@ func NewAudio() (*Audio, error) {
 		CommandCh:  commandCh,
 		state: &state{
 			events:     make([][]*midiEvent, samplesPerCycle*2),
-			oscParams:  &oscParams{kind: "sine"},
+			oscParams:  &oscParams{kind: "sine", portamentoTime: 100},
 			adsrParams: &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 			polyMode:   false,
 			monoOsc:    newMonoOsc(),
