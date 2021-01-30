@@ -344,8 +344,8 @@ func (a *adsr) step() {
 			a.phasePos++
 		}
 	case "decay":
-		a.value = exponentialRampToValue(1.0, a.sustain, t/float64(a.decay))
-		if t >= float64(a.decay) {
+		a.value = setTargetAtTime(1.0, a.sustain, t/float64(a.decay))
+		if a.value-a.sustain < 0.001 {
 			a.phase = "sustain"
 			a.phasePos = 0
 			a.value = float64(a.sustain)
@@ -355,8 +355,8 @@ func (a *adsr) step() {
 	case "sustain":
 		a.value = float64(a.sustain)
 	case "release":
-		a.value = exponentialRampToValue(a.releaseValue, 0.0, t/float64(a.release))
-		if t >= float64(a.release) {
+		a.value = setTargetAtTime(a.releaseValue, 0.0, t/float64(a.release))
+		if a.value < 0.001 {
 			a.phase = ""
 			a.phasePos = 0
 			a.value = 0
@@ -368,8 +368,9 @@ func (a *adsr) step() {
 	}
 }
 
-func exponentialRampToValue(initialValue float64, targetValue float64, pos float64) float64 {
-	return initialValue * math.Pow(targetValue/initialValue, pos)
+// 63% closer to target when pos=1.0
+func setTargetAtTime(initialValue float64, targetValue float64, pos float64) float64 {
+	return targetValue + (initialValue-targetValue)*math.Exp(-pos)
 }
 
 // ----- Filter ----- //
