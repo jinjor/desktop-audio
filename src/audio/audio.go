@@ -303,6 +303,8 @@ func (o *osc) calcEach(freqShift float64) float64 {
 		return -1
 	case "saw":
 		return o.phase01*2 - 1
+	case "saw-rev":
+		return o.phase01*(-2) + 1
 	case "noise":
 		return rand.Float64()*2 - 1
 	}
@@ -581,6 +583,7 @@ func (f *filter) set(key string, value string) error {
 
 type lfo struct {
 	destination string
+	wave        string
 	freqType    string
 	freq        float64
 	amount      float64
@@ -590,16 +593,18 @@ type lfo struct {
 
 func newLfo() *lfo {
 	return &lfo{
-		freqType: "none",
-		freq:     0,
-		amount:   0,
-		osc:      &osc{},
-		out:      make([]float64, samplesPerCycle),
+		destination: "none",
+		wave:        "sine",
+		freqType:    "none",
+		freq:        0,
+		amount:      0,
+		osc:         &osc{},
+		out:         make([]float64, samplesPerCycle),
 	}
 }
 
 func (l *lfo) calc() {
-	l.osc.kind = "sine"
+	l.osc.kind = l.wave
 	l.osc.freq = l.freq
 	for i := 0; i < len(l.out); i++ {
 		l.out[i] = l.osc.calcEach(0) * l.amount
@@ -610,18 +615,20 @@ func (l *lfo) set(key string, value string) error {
 	switch key {
 	case "destination":
 		l.initByDestination(value)
+	case "wave":
+		l.wave = value
 	case "freq":
-		freq, err := strconv.ParseFloat(value, 64)
+		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
-		l.freq = freq
+		l.freq = value
 	case "amount":
-		amount, err := strconv.ParseFloat(value, 64)
+		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
-		l.amount = amount
+		l.amount = value
 	}
 	return nil
 }

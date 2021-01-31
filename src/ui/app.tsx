@@ -361,6 +361,7 @@ const LFO = (o: { index: number }) => {
           <Radio list={list} value={value} onChange={onChange} />
         </div>
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+          <LFOWaveSelect index={o.index} />
           <LFOFreq
             index={o.index}
             min={destination.minFreq}
@@ -376,6 +377,20 @@ const LFO = (o: { index: number }) => {
         </div>
       </div>
     </EditGroup>
+  );
+};
+const LFOWaveSelect = (o: { index: number }) => {
+  const [value, setValue] = useState("sine");
+  const onChange = (value: string) => {
+    setValue(value);
+    ipcRenderer.send("audio", ["set", "lfo", String(o.index), "wave", value]);
+  };
+  return (
+    <Radio
+      list={["sine", "triangle", "square", "pulse", "saw", "saw-rev"]}
+      value={value}
+      onChange={onChange}
+    />
   );
 };
 const LFOFreq = (o: {
