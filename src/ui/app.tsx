@@ -274,7 +274,7 @@ const FilterQ = () => {
 
 const FilterGain = () => {
   const [value, setValue] = useState(0);
-  const onInput = (value: number) => {
+  const onChange = (value: number) => {
     ipcRenderer.send("audio", ["set", "filter", "gain", value]);
     setValue(value);
   };
@@ -286,12 +286,144 @@ const FilterGain = () => {
       exponential={false}
       value={value}
       from={0}
-      onChange={onInput}
+      onChange={onChange}
       label="Gain"
     />
   );
 };
 
+type LFODestination = {
+  freqType: string;
+  minFreq: number;
+  maxFreq: number;
+  defaultFreq: number;
+  minAmount: number;
+  maxAmount: number;
+  defaultAmount: number;
+};
+const lfoDestinations = new Map<string, LFODestination>();
+lfoDestinations.set("none", {
+  freqType: "absolute",
+  minFreq: 0,
+  maxFreq: 0,
+  defaultFreq: 0,
+  minAmount: 0,
+  maxAmount: 0,
+  defaultAmount: 0,
+});
+// lfoDestinations.set("tremolo", {
+//   freqType: "absolute",
+//   minFreq: 0.1,
+//   maxFreq: 100,
+//   defaultFreq: 0.1,
+//   minAmount: 0,
+//   maxAmount: 1,
+//   defaultAmount: 0,
+// });
+lfoDestinations.set("vibrato", {
+  freqType: "absolute",
+  minFreq: 0,
+  maxFreq: 100,
+  defaultFreq: 10,
+  minAmount: 0,
+  maxAmount: 200,
+  defaultAmount: 0,
+});
+// lfoDestinations.set("fm", {
+//   freqType: "ratio",
+//   minFreq: 0.1,
+//   maxFreq: 10,
+//   defaultFreq: 3,
+//   minAmount: 0,
+//   maxAmount: 1.57,
+//   defaultAmount: 1,
+// });
+const LFO = (o: { index: number }) => {
+  const list = [...lfoDestinations.keys()];
+  const [value, setValue] = useState("none");
+  const [destination, setDestination] = useState(lfoDestinations.get("none")!);
+  const onChange = (value: string) => {
+    const destination = lfoDestinations.get(value)!;
+    ipcRenderer.send("audio", [
+      "set",
+      "lfo",
+      String(o.index),
+      "destination",
+      value,
+    ]);
+    setValue(value);
+    setDestination(destination);
+  };
+  return (
+    <EditGroup label={`LFO ${o.index + 1}`}>
+      <div style={{ display: "flex", gap: "12px" }}>
+        <div>
+          <Radio list={list} value={value} onChange={onChange} />
+        </div>
+        <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+          <LFOFreq
+            index={o.index}
+            min={destination.minFreq}
+            max={destination.maxFreq}
+            value={destination.defaultFreq}
+          />
+          <LFOAmount
+            index={o.index}
+            min={destination.minAmount}
+            max={destination.maxAmount}
+            value={destination.defaultAmount}
+          />
+        </div>
+      </div>
+    </EditGroup>
+  );
+};
+const LFOFreq = (o: {
+  index: number;
+  min: number;
+  max: number;
+  value: number;
+}) => {
+  const [value, setValue] = useState(o.value);
+  const onInput = (value: number) => {
+    ipcRenderer.send("audio", ["set", "lfo", String(o.index), "freq", value]);
+    setValue(value);
+  };
+  return (
+    <LabeledKnob
+      min={o.min}
+      max={o.max}
+      steps={400}
+      exponential={false}
+      value={value}
+      onChange={onInput}
+      label="Freq"
+    />
+  );
+};
+const LFOAmount = (o: {
+  index: number;
+  min: number;
+  max: number;
+  value: number;
+}) => {
+  const [value, setValue] = useState(o.value);
+  const onInput = (value: number) => {
+    ipcRenderer.send("audio", ["set", "lfo", String(o.index), "amount", value]);
+    setValue(value);
+  };
+  return (
+    <LabeledKnob
+      min={o.min}
+      max={o.max}
+      steps={400}
+      exponential={false}
+      value={value}
+      onChange={onInput}
+      label="Amount"
+    />
+  );
+};
 const Canvas = (props: {
   listen: (canvas: HTMLCanvasElement) => () => void;
   [key: string]: any;
@@ -354,7 +486,7 @@ const Spectrum = () => {
       ipcRenderer.off("audio", callback);
     };
   };
-  return <Canvas width="512" height="200" listen={listen} />;
+  return <Canvas width="256" height="100" listen={listen} />;
 };
 
 function renderFrequencyShape(
@@ -439,6 +571,9 @@ const App = () => {
             </div>
           </div>
         </EditGroup>
+        <LFO index={0} />
+        <LFO index={1} />
+        <LFO index={2} />
       </div>
       <Notes />
       <Spectrum />
