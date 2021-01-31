@@ -566,7 +566,7 @@ const App = () => {
             </div>
           </div>
         </EditGroup>
-        <EditGroup label="EG">
+        <EditGroup label="Envelope">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
             <Attack />
             <Decay />

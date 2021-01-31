@@ -6,7 +6,7 @@ export const Radio = (o: {
   onChange: (value: string) => void;
 }) => {
   return (
-    <div style={{ display: "flex", flexFlow: "column" }}>
+    <div style={{ display: "flex", flexFlow: "column", userSelect: "none" }}>
       {o.list.map((item) => {
         const selected = item === o.value;
         return (
@@ -38,11 +38,11 @@ const Option = (o: {
     >
       <div
         style={{
-          width: "8px",
-          height: "8px",
+          width: "7px",
+          height: "7px",
           borderRadius: "50%",
           border: "solid 2px #222",
-          backgroundColor: o.selected ? "#97f" : "#222",
+          backgroundColor: o.selected ? "#97f" : "#000",
           marginRight: "2px",
         }}
       />
