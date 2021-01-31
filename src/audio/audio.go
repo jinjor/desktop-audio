@@ -274,13 +274,14 @@ func (o *osc) calcEach(freqShift float64) float64 {
 		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
 		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
 		if t >= 1 {
+			o.freq = o.nextFreq
 			o.shiftPos = 0
 		} else {
 			o.shiftPos++
 		}
 	}
 	o.phase01 += shiftFreqByCents(o.freq, freqShift) / float64(sampleRate)
-	if o.phase01 > 1 {
+	if o.phase01 >= 1 {
 		o.phase01 -= 1.0
 	}
 	switch o.kind {
