@@ -246,7 +246,7 @@ type osc struct {
 	kind      string
 	glideTime int // ms
 	freq      float64
-	phase01   float64
+	phase01   int64
 	shiftPos  float64
 	prevFreq  float64
 	nextFreq  float64
@@ -280,32 +280,33 @@ func (o *osc) calcEach(freqShift float64) float64 {
 			o.shiftPos++
 		}
 	}
-	o.phase01 += shiftFreqByCents(o.freq, freqShift) / float64(sampleRate)
-	if o.phase01 >= 1 {
-		o.phase01 -= 1.0
+	o.phase01 += int64(shiftFreqByCents(o.freq, freqShift)*100000000) / sampleRate
+	if o.phase01 >= 100000000 {
+		o.phase01 -= 100000000
 	}
+	phase01 := float64(o.phase01) / 100000000
 	switch o.kind {
 	case "sine":
-		return math.Sin(2 * math.Pi * o.phase01)
+		return math.Sin(2 * math.Pi * phase01)
 	case "triangle":
-		if o.phase01 < 0.5 {
-			return o.phase01*4 - 1
+		if phase01 < 0.5 {
+			return phase01*4 - 1
 		}
-		return o.phase01*(-4) + 3
+		return phase01*(-4) + 3
 	case "square":
-		if o.phase01 < 0.5 {
+		if phase01 < 0.5 {
 			return 1
 		}
 		return -1
 	case "pulse":
-		if o.phase01 < 0.25 {
+		if phase01 < 0.25 {
 			return 1
 		}
 		return -1
 	case "saw":
-		return o.phase01*2 - 1
+		return phase01*2 - 1
 	case "saw-rev":
-		return o.phase01*(-2) + 1
+		return phase01*(-2) + 1
 	case "noise":
 		return rand.Float64()*2 - 1
 	}
