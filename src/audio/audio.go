@@ -246,7 +246,9 @@ type osc struct {
 	kind      string
 	glideTime int // ms
 	freq      float64
+	pos       int64
 	phase01   float64
+	gliding   bool
 	shiftPos  float64
 	prevFreq  float64
 	nextFreq  float64
@@ -264,52 +266,75 @@ func (o *osc) initWithNote(p *oscParams, note int) {
 	o.freq = noteToFreq(p, note)
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
+	nextFreq := noteToFreq(p, note)
+	if math.Abs(nextFreq-o.freq) < 0.001 {
+		return
+	}
 	o.glideTime = glideTime
 	o.prevFreq = o.freq
-	o.nextFreq = noteToFreq(p, note)
-	o.shiftPos = 1
+	o.nextFreq = nextFreq
+	o.gliding = true
+	o.shiftPos = 0
+	_, o.phase01 = math.Modf(o.freq / float64(sampleRate) * float64(o.pos))
+	o.pos = 0
 }
 func (o *osc) calcEach(freqShift float64) float64 {
-	if o.shiftPos > 0 {
+	freq := shiftFreqByCents(o.freq, freqShift)
+	_, phase01 := math.Modf(freq/float64(sampleRate)*float64(o.pos) + o.phase01)
+	value := 0.0
+	switch o.kind {
+	case "sine":
+		value = math.Sin(2 * math.Pi * phase01)
+	case "triangle":
+		if phase01 < 0.5 {
+			value = phase01*4 - 1
+		} else {
+			value = phase01*(-4) + 3
+		}
+	case "square":
+		if o.gliding {
+			if phase01 < 0.5 {
+				value = 1
+			} else {
+				value = -1
+			}
+		} else {
+			length := int64(sampleRate / freq)
+			if o.pos%length < length/2 {
+				value = 1
+			} else {
+				value = -1
+			}
+		}
+	case "pulse":
+		if phase01 < 0.25 {
+			value = 1
+		} else {
+			value = -1
+		}
+	case "saw":
+		value = phase01*2 - 1
+	case "saw-rev":
+		value = phase01*(-2) + 1
+	case "noise":
+		value = rand.Float64()*2 - 1
+	}
+	if o.gliding {
+		o.phase01 += freq / float64(sampleRate)
+		_, o.phase01 = math.Modf(o.phase01)
+		o.shiftPos++
 		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
 		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
 		if t >= 1 {
 			o.freq = o.nextFreq
-			o.shiftPos = 0
-		} else {
-			o.shiftPos++
+			o.gliding = false
+			o.pos = int64(o.phase01 * (float64(sampleRate) / o.freq))
+			o.phase01 = 0
 		}
+	} else {
+		o.pos++
 	}
-	o.phase01 += shiftFreqByCents(o.freq, freqShift) / float64(sampleRate)
-	if o.phase01 >= 1 {
-		o.phase01 -= 1.0
-	}
-	switch o.kind {
-	case "sine":
-		return math.Sin(2 * math.Pi * o.phase01)
-	case "triangle":
-		if o.phase01 < 0.5 {
-			return o.phase01*4 - 1
-		}
-		return o.phase01*(-4) + 3
-	case "square":
-		if o.phase01 < 0.5 {
-			return 1
-		}
-		return -1
-	case "pulse":
-		if o.phase01 < 0.25 {
-			return 1
-		}
-		return -1
-	case "saw":
-		return o.phase01*2 - 1
-	case "saw-rev":
-		return o.phase01*(-2) + 1
-	case "noise":
-		return rand.Float64()*2 - 1
-	}
-	return 0
+	return value
 }
 
 // ----- ADSR ----- //
