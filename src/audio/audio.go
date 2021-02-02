@@ -246,7 +246,9 @@ type osc struct {
 	kind      string
 	glideTime int // ms
 	freq      float64
+	pos       int64
 	phase01   float64
+	gliding   bool
 	shiftPos  float64
 	prevFreq  float64
 	nextFreq  float64
@@ -264,52 +266,74 @@ func (o *osc) initWithNote(p *oscParams, note int) {
 	o.freq = noteToFreq(p, note)
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
+	nextFreq := noteToFreq(p, note)
+	if math.Abs(nextFreq-o.freq) < 0.001 {
+		return
+	}
 	o.glideTime = glideTime
 	o.prevFreq = o.freq
-	o.nextFreq = noteToFreq(p, note)
-	o.shiftPos = 1
+	o.nextFreq = nextFreq
+	o.gliding = true
+	o.shiftPos = 0
+	_, o.phase01 = math.Modf(o.freq / float64(sampleRate) * float64(o.pos))
+	o.pos = 0
 }
 func (o *osc) calcEach(freqShift float64) float64 {
-	if o.shiftPos > 0 {
-		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
-		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
-		if t >= 1 {
-			o.freq = o.nextFreq
-			o.shiftPos = 0
-		} else {
-			o.shiftPos++
-		}
+	freq := shiftFreqByCents(o.freq, freqShift)
+	var p float64
+	if o.gliding {
+		p = math.Mod(o.phase01, 1)
+	} else {
+		length := int64(sampleRate / freq)
+		p = float64(o.pos%length) / float64(length)
 	}
-	o.phase01 += shiftFreqByCents(o.freq, freqShift) / float64(sampleRate)
-	if o.phase01 >= 1 {
-		o.phase01 -= 1.0
-	}
+
+	value := 0.0
 	switch o.kind {
 	case "sine":
-		return math.Sin(2 * math.Pi * o.phase01)
+		value = math.Sin(2 * math.Pi * p)
 	case "triangle":
-		if o.phase01 < 0.5 {
-			return o.phase01*4 - 1
+		if p < 0.5 {
+			value = p*4 - 1
+		} else {
+			value = p*(-4) + 3
 		}
-		return o.phase01*(-4) + 3
 	case "square":
-		if o.phase01 < 0.5 {
-			return 1
+		if p < 0.5 {
+			value = 1
+		} else {
+			value = -1
 		}
-		return -1
 	case "pulse":
-		if o.phase01 < 0.25 {
-			return 1
+		if p < 0.25 {
+			value = 1
+		} else {
+			value = -1
 		}
-		return -1
 	case "saw":
-		return o.phase01*2 - 1
+		value = p*2 - 1
 	case "saw-rev":
-		return o.phase01*(-2) + 1
+		value = p*(-2) + 1
 	case "noise":
-		return rand.Float64()*2 - 1
+		value = rand.Float64()*2 - 1
 	}
-	return 0
+
+	if o.gliding {
+		o.phase01 += freq / float64(sampleRate)
+		_, o.phase01 = math.Modf(o.phase01)
+		o.shiftPos++
+		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
+		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
+		if t >= 1 || math.Abs(o.nextFreq-o.freq) < 0.001 {
+			o.freq = o.nextFreq
+			o.gliding = false
+			o.pos = int64(o.phase01 * (float64(sampleRate) / o.freq))
+			o.phase01 = 0
+		}
+	} else {
+		o.pos++
+	}
+	return value
 }
 
 // ----- ADSR ----- //
