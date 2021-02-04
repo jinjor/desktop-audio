@@ -246,7 +246,6 @@ type osc struct {
 	kind      string
 	glideTime int // ms
 	freq      float64
-	pos       int64
 	phase01   float64
 	gliding   bool
 	shiftPos  float64
@@ -275,19 +274,10 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	o.nextFreq = nextFreq
 	o.gliding = true
 	o.shiftPos = 0
-	_, o.phase01 = math.Modf(o.freq / float64(sampleRate) * float64(o.pos))
-	o.pos = 0
 }
 func (o *osc) calcEach(freqShift float64) float64 {
 	freq := shiftFreqByCents(o.freq, freqShift)
-	var p float64
-	if o.gliding {
-		p = math.Mod(o.phase01, 1)
-	} else {
-		length := int64(sampleRate / freq)
-		p = float64(o.pos%length) / float64(length)
-	}
-
+	p := math.Mod(o.phase01, 1)
 	value := 0.0
 	switch o.kind {
 	case "sine":
@@ -317,21 +307,16 @@ func (o *osc) calcEach(freqShift float64) float64 {
 	case "noise":
 		value = rand.Float64()*2 - 1
 	}
-
+	o.phase01 += freq / float64(sampleRate)
+	_, o.phase01 = math.Modf(o.phase01)
 	if o.gliding {
-		o.phase01 += freq / float64(sampleRate)
-		_, o.phase01 = math.Modf(o.phase01)
 		o.shiftPos++
 		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
 		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
 		if t >= 1 || math.Abs(o.nextFreq-o.freq) < 0.001 {
 			o.freq = o.nextFreq
 			o.gliding = false
-			o.pos = int64(o.phase01 * (float64(sampleRate) / o.freq))
-			o.phase01 = 0
 		}
-	} else {
-		o.pos++
 	}
 	return value
 }
