@@ -60,7 +60,7 @@ type monoOsc struct {
 
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
-		osc:         &osc{},
+		osc:         &osc{phase01: rand.Float64()},
 		adsr:        &adsr{},
 		activeNotes: make([]int, 0, 128),
 		out:         make([]float64, samplesPerCycle),
@@ -141,7 +141,7 @@ func newPolyOsc() *polyOsc {
 	pooled := make([]*oscWithADSR, maxPoly)
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &oscWithADSR{
-			osc:  &osc{},
+			osc:  &osc{phase01: rand.Float64()},
 			adsr: &adsr{},
 		}
 	}
@@ -278,6 +278,7 @@ func shiftFreqByCents(freq float64, cent float64) float64 {
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
 	o.freq = noteToFreq(p, note)
+	o.phase01 = rand.Float64()
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	nextFreq := noteToFreq(p, note)
@@ -623,7 +624,7 @@ func newLfo() *lfo {
 		freqType:    "none",
 		freq:        0,
 		amount:      0,
-		osc:         &osc{},
+		osc:         &osc{phase01: rand.Float64()},
 		out:         make([]float64, samplesPerCycle),
 	}
 }
