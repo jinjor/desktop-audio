@@ -112,6 +112,7 @@ func (m *monoOsc) calc(
 		m.adsr.step()
 		freqShift := 0.0
 		freqRatio := 1.0
+		ampRatio := 1.0
 		for _, lfo := range lfos {
 			if lfo.destination == "vibrato" {
 				freqShift += lfo.out[i]
@@ -119,8 +120,11 @@ func (m *monoOsc) calc(
 			if lfo.destination == "vibrato-exp" {
 				freqRatio *= math.Pow(2.0, lfo.out[i])
 			}
+			if lfo.destination == "tremolo" {
+				ampRatio *= 1 - lfo.amount/2 + lfo.out[i]/2
+			}
 		}
-		m.out[i] = m.osc.calcEach(freqShift, freqRatio) * 0.1 * m.adsr.value
+		m.out[i] = m.osc.calcEach(freqShift, freqRatio) * 0.1 * ampRatio * m.adsr.value
 	}
 }
 
@@ -174,6 +178,7 @@ func (p *polyOsc) calc(
 		}
 		freqShift := 0.0
 		freqRatio := 1.0
+		ampRatio := 1.0
 		for _, lfo := range lfos {
 			if lfo.destination == "vibrato" {
 				freqShift += lfo.out[i]
@@ -181,10 +186,12 @@ func (p *polyOsc) calc(
 			if lfo.destination == "vibrato-exp" {
 				freqRatio *= math.Pow(2.0, lfo.out[i])
 			}
+			if lfo.destination == "tremolo" {
+				ampRatio *= 1 - lfo.amount/2 + lfo.out[i]/2
+			}
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
-			value := o.osc.calcEach(freqShift, freqRatio) * 0.1
 			for _, e := range events {
 				switch data := e.event.(type) {
 				case *noteOff:
@@ -198,7 +205,7 @@ func (p *polyOsc) calc(
 				}
 			}
 			o.adsr.step()
-			p.out[i] += value * o.adsr.value
+			p.out[i] += o.osc.calcEach(freqShift, freqRatio) * 0.1 * ampRatio * o.adsr.value
 			if o.adsr.phase == "" {
 				p.active = append(p.active[:j], p.active[j+1:]...)
 				p.pooled = append(p.pooled, o)
@@ -662,7 +669,12 @@ func (l *lfo) initByDestination(destination string) {
 		l.freqType = "absolute"
 		l.freq = 0
 		l.amount = 0
+	case "tremolo":
+		l.freqType = "absolute"
+		l.freq = 0
+		l.amount = 0
 	}
+
 }
 
 // ----- Audio ----- //

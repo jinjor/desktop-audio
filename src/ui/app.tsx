@@ -313,15 +313,16 @@ lfoDestinations.set("none", {
   defaultAmount: 0,
   fromAmount: 0,
 });
-// lfoDestinations.set("tremolo", {
-//   freqType: "absolute",
-//   minFreq: 0.1,
-//   maxFreq: 100,
-//   defaultFreq: 0.1,
-//   minAmount: 0,
-//   maxAmount: 1,
-//   defaultAmount: 0,
-// });
+lfoDestinations.set("tremolo", {
+  freqType: "absolute",
+  minFreq: 0.1,
+  maxFreq: 100,
+  defaultFreq: 0.1,
+  minAmount: 0,
+  maxAmount: 1,
+  defaultAmount: 0,
+  fromAmount: 0,
+});
 lfoDestinations.set("vibrato", {
   freqType: "absolute",
   minFreq: 0,
