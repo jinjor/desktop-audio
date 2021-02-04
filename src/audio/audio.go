@@ -54,6 +54,7 @@ type noteOff struct {
 type monoOsc struct {
 	osc         *osc
 	adsr        *adsr
+	lfos        []*lfo
 	activeNotes []int
 	out         []float64 // length: samplesPerCycle
 }
@@ -62,6 +63,7 @@ func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		osc:         &osc{phase01: rand.Float64()},
 		adsr:        &adsr{},
+		lfos:        []*lfo{newLfo(), newLfo(), newLfo()},
 		activeNotes: make([]int, 0, 128),
 		out:         make([]float64, samplesPerCycle),
 	}
@@ -71,9 +73,13 @@ func (m *monoOsc) calc(
 	events [][]*midiEvent,
 	oscParams *oscParams,
 	adsrParams *adsrParams,
+	lfoParams []*lfoParams,
 	glideTime int,
-	lfos []*lfo,
 ) {
+	for i, lfo := range m.lfos {
+		lfo.applyParams(lfoParams[i])
+		lfo.calc()
+	}
 	m.adsr.setParams(adsrParams)
 	for i := int64(0); i < int64(len(m.out)); i++ {
 		for _, e := range events[i] {
@@ -113,7 +119,7 @@ func (m *monoOsc) calc(
 		freqShift := 0.0
 		freqRatio := 1.0
 		ampRatio := 1.0
-		for _, lfo := range lfos {
+		for _, lfo := range m.lfos {
 			if lfo.destination == "vibrato" {
 				freqShift += lfo.out[i]
 			}
@@ -131,6 +137,7 @@ func (m *monoOsc) calc(
 // ----- POLY OSC ----- //
 
 type polyOsc struct {
+	lfos []*lfo
 	// pooled + active = maxPoly
 	pooled []*oscWithADSR
 	active []*oscWithADSR
@@ -146,6 +153,7 @@ func newPolyOsc() *polyOsc {
 		}
 	}
 	return &polyOsc{
+		lfos:   []*lfo{newLfo(), newLfo(), newLfo()},
 		pooled: pooled,
 		out:    make([]float64, samplesPerCycle),
 	}
@@ -155,8 +163,12 @@ func (p *polyOsc) calc(
 	events [][]*midiEvent,
 	oscParams *oscParams,
 	adsrParams *adsrParams,
-	lfos []*lfo,
+	lfoParams []*lfoParams,
 ) {
+	for i, lfo := range p.lfos {
+		lfo.applyParams(lfoParams[i])
+		lfo.calc()
+	}
 	for i := int64(0); i < int64(len(p.out)); i++ {
 		p.out[i] = 0
 		events := events[i]
@@ -179,7 +191,7 @@ func (p *polyOsc) calc(
 		freqShift := 0.0
 		freqRatio := 1.0
 		ampRatio := 1.0
-		for _, lfo := range lfos {
+		for _, lfo := range p.lfos {
 			if lfo.destination == "vibrato" {
 				freqShift += lfo.out[i]
 			}
@@ -607,6 +619,64 @@ func (f *filter) set(key string, value string) error {
 
 // ----- LFO ----- //
 
+type lfoParams struct {
+	destination string
+	wave        string
+	freqType    string
+	freq        float64
+	amount      float64
+}
+
+func newLfoParams() *lfoParams {
+	return &lfoParams{
+		destination: "none",
+		wave:        "sine",
+		freqType:    "none",
+		freq:        0,
+		amount:      0,
+	}
+}
+
+func (l *lfoParams) initByDestination(destination string) {
+	l.destination = destination
+	switch destination {
+	case "vibrato":
+		l.freqType = "absolute"
+		l.freq = 0
+		l.amount = 0
+	case "vibrato-exp":
+		l.freqType = "absolute"
+		l.freq = 0
+		l.amount = 0
+	case "tremolo":
+		l.freqType = "absolute"
+		l.freq = 0
+		l.amount = 0
+	}
+}
+
+func (l *lfoParams) set(key string, value string) error {
+	switch key {
+	case "destination":
+		l.initByDestination(value)
+	case "wave":
+		l.wave = value
+	case "freq":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.freq = value
+	case "amount":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.amount = value
+	}
+	return nil
+}
+
 type lfo struct {
 	destination string
 	wave        string
@@ -629,53 +699,20 @@ func newLfo() *lfo {
 	}
 }
 
+func (l *lfo) applyParams(p *lfoParams) {
+	l.destination = p.destination
+	l.wave = p.wave
+	l.freqType = p.freqType
+	l.freq = p.freq
+	l.amount = p.amount
+}
+
 func (l *lfo) calc() {
 	l.osc.kind = l.wave
 	l.osc.freq = l.freq
 	for i := 0; i < len(l.out); i++ {
 		l.out[i] = l.osc.calcEach(0, 1.0) * l.amount
 	}
-}
-
-func (l *lfo) set(key string, value string) error {
-	switch key {
-	case "destination":
-		l.initByDestination(value)
-	case "wave":
-		l.wave = value
-	case "freq":
-		value, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		l.freq = value
-	case "amount":
-		value, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		l.amount = value
-	}
-	return nil
-}
-
-func (l *lfo) initByDestination(destination string) {
-	l.destination = destination
-	switch destination {
-	case "vibrato":
-		l.freqType = "absolute"
-		l.freq = 0
-		l.amount = 0
-	case "vibrato-exp":
-		l.freqType = "absolute"
-		l.freq = 0
-		l.amount = 0
-	case "tremolo":
-		l.freqType = "absolute"
-		l.freq = 0
-		l.amount = 0
-	}
-
 }
 
 // ----- Audio ----- //
@@ -725,15 +762,16 @@ type state struct {
 	events     [][]*midiEvent // length: samplesPerCycle * 2
 	oscParams  *oscParams
 	adsrParams *adsrParams
+	lfoParams  []*lfoParams
 	polyMode   bool
 	glideTime  int // ms
 	monoOsc    *monoOsc
 	polyOsc    *polyOsc
 	filter     *filter
-	lfos       []*lfo
-	pos        int64
-	out        []float64 // length: fftSize
-	lastRead   float64
+	// lfos       []*lfo
+	pos      int64
+	out      []float64 // length: fftSize
+	lastRead float64
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -747,16 +785,13 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		timestamp := now()
 		bufSamples := int64(len(buf) / bytesPerSample)
 
-		for _, lfo := range a.state.lfos {
-			lfo.calc()
-		}
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfos)
+			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams)
 			a.state.filter.process(a.state.polyOsc.out, out)
 		} else {
-			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.glideTime, a.state.lfos)
+			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.glideTime)
 			a.state.filter.process(a.state.monoOsc.out, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
@@ -807,12 +842,12 @@ func NewAudio() (*Audio, error) {
 			events:     make([][]*midiEvent, samplesPerCycle*2),
 			oscParams:  &oscParams{kind: "sine"},
 			adsrParams: &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
+			lfoParams:  []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
 			polyMode:   false,
 			glideTime:  100,
 			monoOsc:    newMonoOsc(),
 			polyOsc:    newPolyOsc(),
 			filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
-			lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
 			pos:        0,
 			out:        make([]float64, fftSize),
 		},
@@ -885,7 +920,7 @@ func (a *Audio) update(command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			err = a.state.lfos[index].set(command[0], command[1])
+			err = a.state.lfoParams[index].set(command[0], command[1])
 			if err != nil {
 				panic(err)
 			}

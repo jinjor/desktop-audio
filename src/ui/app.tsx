@@ -343,15 +343,16 @@ lfoDestinations.set("vibrato-exp", {
   defaultAmount: 0,
   fromAmount: 0,
 });
-// lfoDestinations.set("fm", {
-//   freqType: "ratio",
-//   minFreq: 0.1,
-//   maxFreq: 10,
-//   defaultFreq: 3,
-//   minAmount: 0,
-//   maxAmount: 1.57,
-//   defaultAmount: 1,
-// });
+lfoDestinations.set("fm", {
+  freqType: "ratio",
+  minFreq: 0.1,
+  maxFreq: 10,
+  defaultFreq: 3,
+  minAmount: 0,
+  maxAmount: 1.57,
+  defaultAmount: 1,
+  fromAmount: 0,
+});
 const LFO = (o: { index: number }) => {
   const list = [...lfoDestinations.keys()];
   const [value, setValue] = useState("none");
