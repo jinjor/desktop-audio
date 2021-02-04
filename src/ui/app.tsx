@@ -300,6 +300,7 @@ type LFODestination = {
   minAmount: number;
   maxAmount: number;
   defaultAmount: number;
+  fromAmount: number;
 };
 const lfoDestinations = new Map<string, LFODestination>();
 lfoDestinations.set("none", {
@@ -310,6 +311,7 @@ lfoDestinations.set("none", {
   minAmount: 0,
   maxAmount: 0,
   defaultAmount: 0,
+  fromAmount: 0,
 });
 // lfoDestinations.set("tremolo", {
 //   freqType: "absolute",
@@ -323,11 +325,22 @@ lfoDestinations.set("none", {
 lfoDestinations.set("vibrato", {
   freqType: "absolute",
   minFreq: 0,
-  maxFreq: 100,
+  maxFreq: 40,
   defaultFreq: 10,
   minAmount: 0,
   maxAmount: 200,
   defaultAmount: 0,
+  fromAmount: 0,
+});
+lfoDestinations.set("vibrato-exp", {
+  freqType: "absolute",
+  minFreq: 0,
+  maxFreq: 40,
+  defaultFreq: 10,
+  minAmount: 0,
+  maxAmount: 1,
+  defaultAmount: 0,
+  fromAmount: 0,
 });
 // lfoDestinations.set("fm", {
 //   freqType: "ratio",
@@ -373,6 +386,7 @@ const LFO = (o: { index: number }) => {
             min={destination.minAmount}
             max={destination.maxAmount}
             value={destination.defaultAmount}
+            from={destination.fromAmount}
           />
         </div>
       </div>
@@ -421,6 +435,7 @@ const LFOAmount = (o: {
   min: number;
   max: number;
   value: number;
+  from: number;
 }) => {
   const [value, setValue] = useState(o.value);
   const onInput = (value: number) => {
@@ -434,6 +449,7 @@ const LFOAmount = (o: {
       steps={400}
       exponential={false}
       value={value}
+      from={o.from}
       onChange={onInput}
       label="Amount"
     />

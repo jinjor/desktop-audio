@@ -111,12 +111,16 @@ func (m *monoOsc) calc(
 		}
 		m.adsr.step()
 		freqShift := 0.0
+		freqRatio := 1.0
 		for _, lfo := range lfos {
 			if lfo.destination == "vibrato" {
 				freqShift += lfo.out[i]
 			}
+			if lfo.destination == "vibrato-exp" {
+				freqRatio *= math.Pow(2.0, lfo.out[i])
+			}
 		}
-		m.out[i] = m.osc.calcEach(freqShift) * 0.1 * m.adsr.value
+		m.out[i] = m.osc.calcEach(freqShift, freqRatio) * 0.1 * m.adsr.value
 	}
 }
 
@@ -169,14 +173,18 @@ func (p *polyOsc) calc(
 			}
 		}
 		freqShift := 0.0
+		freqRatio := 1.0
 		for _, lfo := range lfos {
 			if lfo.destination == "vibrato" {
 				freqShift += lfo.out[i]
 			}
+			if lfo.destination == "vibrato-exp" {
+				freqRatio *= math.Pow(2.0, lfo.out[i])
+			}
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
-			value := o.osc.calcEach(freqShift) * 0.1
+			value := o.osc.calcEach(freqShift, freqRatio) * 0.1
 			for _, e := range events {
 				switch data := e.event.(type) {
 				case *noteOff:
@@ -275,8 +283,8 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	o.gliding = true
 	o.shiftPos = 0
 }
-func (o *osc) calcEach(freqShift float64) float64 {
-	freq := shiftFreqByCents(o.freq, freqShift)
+func (o *osc) calcEach(freqShift float64, freqRatio float64) float64 {
+	freq := shiftFreqByCents(o.freq, freqShift) * freqRatio
 	p := math.Mod(o.phase01, 1)
 	value := 0.0
 	switch o.kind {
@@ -617,7 +625,7 @@ func (l *lfo) calc() {
 	l.osc.kind = l.wave
 	l.osc.freq = l.freq
 	for i := 0; i < len(l.out); i++ {
-		l.out[i] = l.osc.calcEach(0) * l.amount
+		l.out[i] = l.osc.calcEach(0, 1.0) * l.amount
 	}
 }
 
@@ -647,6 +655,10 @@ func (l *lfo) initByDestination(destination string) {
 	l.destination = destination
 	switch destination {
 	case "vibrato":
+		l.freqType = "absolute"
+		l.freq = 0
+		l.amount = 0
+	case "vibrato-exp":
 		l.freqType = "absolute"
 		l.freq = 0
 		l.amount = 0
