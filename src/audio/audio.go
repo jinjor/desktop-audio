@@ -78,7 +78,6 @@ func (m *monoOsc) calc(
 ) {
 	for i, lfo := range m.lfos {
 		lfo.applyParams(lfoParams[i])
-		lfo.calc()
 	}
 	m.adsr.setParams(adsrParams)
 	for i := int64(0); i < int64(len(m.out)); i++ {
@@ -120,40 +119,34 @@ func (m *monoOsc) calc(
 		freqRatio := 1.0
 		ampRatio := 1.0
 		for _, lfo := range m.lfos {
-			if lfo.destination == "vibrato" {
-				freqShift += lfo.out[i]
-			}
-			if lfo.destination == "vibrato-exp" {
-				freqRatio *= math.Pow(2.0, lfo.out[i])
-			}
-			if lfo.destination == "tremolo" {
-				ampRatio *= 1 - lfo.amount/2 + lfo.out[i]/2
-			}
+			_freqShift, _freqRatio, _ampRatio := lfo.step()
+			freqShift += _freqShift
+			freqRatio *= _freqRatio
+			ampRatio *= _ampRatio
 		}
-		m.out[i] = m.osc.calcEach(freqShift, freqRatio) * 0.1 * ampRatio * m.adsr.value
+		m.out[i] = m.osc.step(freqShift, freqRatio) * 0.1 * ampRatio * m.adsr.value
 	}
 }
 
 // ----- POLY OSC ----- //
 
 type polyOsc struct {
-	lfos []*lfo
 	// pooled + active = maxPoly
-	pooled []*oscWithADSR
-	active []*oscWithADSR
+	pooled []*oscWithADSRAndLFO
+	active []*oscWithADSRAndLFO
 	out    []float64 // length: samplesPerCycle
 }
 
 func newPolyOsc() *polyOsc {
-	pooled := make([]*oscWithADSR, maxPoly)
+	pooled := make([]*oscWithADSRAndLFO, maxPoly)
 	for i := 0; i < len(pooled); i++ {
-		pooled[i] = &oscWithADSR{
+		pooled[i] = &oscWithADSRAndLFO{
 			osc:  &osc{phase01: rand.Float64()},
 			adsr: &adsr{},
+			lfos: []*lfo{newLfo(), newLfo(), newLfo()},
 		}
 	}
 	return &polyOsc{
-		lfos:   []*lfo{newLfo(), newLfo(), newLfo()},
 		pooled: pooled,
 		out:    make([]float64, samplesPerCycle),
 	}
@@ -165,9 +158,15 @@ func (p *polyOsc) calc(
 	adsrParams *adsrParams,
 	lfoParams []*lfoParams,
 ) {
-	for i, lfo := range p.lfos {
-		lfo.applyParams(lfoParams[i])
-		lfo.calc()
+	for _, o := range p.active {
+		for i, lfo := range o.lfos {
+			lfo.applyParams(lfoParams[i])
+		}
+	}
+	for _, o := range p.pooled {
+		for i, lfo := range o.lfos {
+			lfo.applyParams(lfoParams[i])
+		}
 	}
 	for i := int64(0); i < int64(len(p.out)); i++ {
 		p.out[i] = 0
@@ -188,22 +187,18 @@ func (p *polyOsc) calc(
 				}
 			}
 		}
-		freqShift := 0.0
-		freqRatio := 1.0
-		ampRatio := 1.0
-		for _, lfo := range p.lfos {
-			if lfo.destination == "vibrato" {
-				freqShift += lfo.out[i]
-			}
-			if lfo.destination == "vibrato-exp" {
-				freqRatio *= math.Pow(2.0, lfo.out[i])
-			}
-			if lfo.destination == "tremolo" {
-				ampRatio *= 1 - lfo.amount/2 + lfo.out[i]/2
-			}
-		}
+
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
+			freqShift := 0.0
+			freqRatio := 1.0
+			ampRatio := 1.0
+			for _, lfo := range o.lfos {
+				_freqShift, _freqRatio, _ampRatio := lfo.step()
+				freqShift += _freqShift
+				freqRatio *= _freqRatio
+				ampRatio *= _ampRatio
+			}
 			for _, e := range events {
 				switch data := e.event.(type) {
 				case *noteOff:
@@ -217,7 +212,7 @@ func (p *polyOsc) calc(
 				}
 			}
 			o.adsr.step()
-			p.out[i] += o.osc.calcEach(freqShift, freqRatio) * 0.1 * ampRatio * o.adsr.value
+			p.out[i] += o.osc.step(freqShift, freqRatio) * 0.1 * ampRatio * o.adsr.value
 			if o.adsr.phase == "" {
 				p.active = append(p.active[:j], p.active[j+1:]...)
 				p.pooled = append(p.pooled, o)
@@ -228,10 +223,11 @@ func (p *polyOsc) calc(
 
 // ----- OSC WITH ADSR ----- //
 
-type oscWithADSR struct {
+type oscWithADSRAndLFO struct {
 	note int
 	osc  *osc
 	adsr *adsr
+	lfos []*lfo
 }
 
 // ----- OSC ----- //
@@ -278,7 +274,6 @@ type osc struct {
 	shiftPos  float64
 	prevFreq  float64
 	nextFreq  float64
-	out       []float64 // length: samplesPerCycle
 }
 
 func noteToFreq(p *oscParams, note int) float64 {
@@ -303,7 +298,7 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	o.gliding = true
 	o.shiftPos = 0
 }
-func (o *osc) calcEach(freqShift float64, freqRatio float64) float64 {
+func (o *osc) step(freqShift float64, freqRatio float64) float64 {
 	freq := shiftFreqByCents(o.freq, freqShift) * freqRatio
 	p := math.Mod(o.phase01, 1)
 	value := 0.0
@@ -679,40 +674,41 @@ func (l *lfoParams) set(key string, value string) error {
 
 type lfo struct {
 	destination string
-	wave        string
 	freqType    string
-	freq        float64
 	amount      float64
 	osc         *osc
-	out         []float64
 }
 
 func newLfo() *lfo {
 	return &lfo{
 		destination: "none",
-		wave:        "sine",
 		freqType:    "none",
-		freq:        0,
 		amount:      0,
 		osc:         &osc{phase01: rand.Float64()},
-		out:         make([]float64, samplesPerCycle),
 	}
 }
 
 func (l *lfo) applyParams(p *lfoParams) {
 	l.destination = p.destination
-	l.wave = p.wave
+	l.osc.kind = p.wave
 	l.freqType = p.freqType
-	l.freq = p.freq
+	l.osc.freq = p.freq
 	l.amount = p.amount
 }
 
-func (l *lfo) calc() {
-	l.osc.kind = l.wave
-	l.osc.freq = l.freq
-	for i := 0; i < len(l.out); i++ {
-		l.out[i] = l.osc.calcEach(0, 1.0) * l.amount
+func (l *lfo) step() (float64, float64, float64) {
+	freqShift := 0.0
+	freqRatio := 1.0
+	ampRatio := 1.0
+	switch l.destination {
+	case "vibrato":
+		freqShift = l.osc.step(0, 1.0) * l.amount
+	case "vibrato-exp":
+		freqRatio = math.Pow(2.0, l.osc.step(0, 1.0)*l.amount)
+	case "tremolo":
+		ampRatio = 1 - l.amount/2 + l.osc.step(0, 1.0)*l.amount/2
 	}
+	return freqShift, freqRatio, ampRatio
 }
 
 // ----- Audio ----- //
