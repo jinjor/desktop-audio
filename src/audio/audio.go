@@ -115,16 +115,14 @@ func (m *monoOsc) calc(
 			}
 		}
 		m.adsr.step()
-		freqShift := 0.0
 		freqRatio := 1.0
 		ampRatio := 1.0
 		for _, lfo := range m.lfos {
-			_freqShift, _freqRatio, _ampRatio := lfo.step()
-			freqShift += _freqShift
+			_freqRatio, _ampRatio := lfo.step()
 			freqRatio *= _freqRatio
 			ampRatio *= _ampRatio
 		}
-		m.out[i] = m.osc.step(freqShift, freqRatio) * 0.1 * ampRatio * m.adsr.value
+		m.out[i] = m.osc.step(freqRatio) * 0.1 * ampRatio * m.adsr.value
 	}
 }
 
@@ -190,12 +188,10 @@ func (p *polyOsc) calc(
 
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
-			freqShift := 0.0
 			freqRatio := 1.0
 			ampRatio := 1.0
 			for _, lfo := range o.lfos {
-				_freqShift, _freqRatio, _ampRatio := lfo.step()
-				freqShift += _freqShift
+				_freqRatio, _ampRatio := lfo.step()
 				freqRatio *= _freqRatio
 				ampRatio *= _ampRatio
 			}
@@ -212,7 +208,7 @@ func (p *polyOsc) calc(
 				}
 			}
 			o.adsr.step()
-			p.out[i] += o.osc.step(freqShift, freqRatio) * 0.1 * ampRatio * o.adsr.value
+			p.out[i] += o.osc.step(freqRatio) * 0.1 * ampRatio * o.adsr.value
 			if o.adsr.phase == "" {
 				p.active = append(p.active[:j], p.active[j+1:]...)
 				p.pooled = append(p.pooled, o)
@@ -279,9 +275,6 @@ type osc struct {
 func noteToFreq(p *oscParams, note int) float64 {
 	return 442 * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
 }
-func shiftFreqByCents(freq float64, cent float64) float64 {
-	return freq * math.Pow(2, cent/100/12)
-}
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
 	o.freq = noteToFreq(p, note)
@@ -298,8 +291,8 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	o.gliding = true
 	o.shiftPos = 0
 }
-func (o *osc) step(freqShift float64, freqRatio float64) float64 {
-	freq := shiftFreqByCents(o.freq, freqShift) * freqRatio
+func (o *osc) step(freqRatio float64) float64 {
+	freq := o.freq * freqRatio
 	p := math.Mod(o.phase01, 1)
 	value := 0.0
 	switch o.kind {
@@ -639,10 +632,6 @@ func (l *lfoParams) initByDestination(destination string) {
 		l.freqType = "absolute"
 		l.freq = 0
 		l.amount = 0
-	case "vibrato-exp":
-		l.freqType = "absolute"
-		l.freq = 0
-		l.amount = 0
 	case "tremolo":
 		l.freqType = "absolute"
 		l.freq = 0
@@ -696,19 +685,16 @@ func (l *lfo) applyParams(p *lfoParams) {
 	l.amount = p.amount
 }
 
-func (l *lfo) step() (float64, float64, float64) {
-	freqShift := 0.0
+func (l *lfo) step() (float64, float64) {
 	freqRatio := 1.0
 	ampRatio := 1.0
 	switch l.destination {
 	case "vibrato":
-		freqShift = l.osc.step(0, 1.0) * l.amount
-	case "vibrato-exp":
-		freqRatio = math.Pow(2.0, l.osc.step(0, 1.0)*l.amount)
+		freqRatio = math.Pow(2.0, l.osc.step(1.0)*l.amount/100/12)
 	case "tremolo":
-		ampRatio = 1 - l.amount/2 + l.osc.step(0, 1.0)*l.amount/2
+		ampRatio = 1 - l.amount/2 + l.osc.step(1.0)*l.amount/2
 	}
-	return freqShift, freqRatio, ampRatio
+	return freqRatio, ampRatio
 }
 
 // ----- Audio ----- //
