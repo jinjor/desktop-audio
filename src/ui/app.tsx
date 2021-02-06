@@ -338,9 +338,29 @@ lfoDestinations.set("fm", {
   minFreq: 0.1,
   maxFreq: 10,
   defaultFreq: 3,
+  minAmount: -2400,
+  maxAmount: 2400,
+  defaultAmount: 0,
+  fromAmount: 0,
+});
+lfoDestinations.set("pm", {
+  freqType: "ratio",
+  minFreq: 0.1,
+  maxFreq: 10,
+  defaultFreq: 3,
   minAmount: 0,
   maxAmount: 1.57,
-  defaultAmount: 1,
+  defaultAmount: 0,
+  fromAmount: 0,
+});
+lfoDestinations.set("am", {
+  freqType: "ratio",
+  minFreq: 0.1,
+  maxFreq: 10,
+  defaultFreq: 3,
+  minAmount: 0,
+  maxAmount: 1,
+  defaultAmount: 0,
   fromAmount: 0,
 });
 const LFO = (o: { index: number }) => {

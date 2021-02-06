@@ -116,13 +116,15 @@ func (m *monoOsc) calc(
 		}
 		m.adsr.step()
 		freqRatio := 1.0
+		phaseShift := 0.0
 		ampRatio := 1.0
 		for _, lfo := range m.lfos {
-			_freqRatio, _ampRatio := lfo.step()
+			_freqRatio, _phaseShift, _ampRatio := lfo.step(m.osc)
 			freqRatio *= _freqRatio
+			phaseShift += _phaseShift
 			ampRatio *= _ampRatio
 		}
-		m.out[i] = m.osc.step(freqRatio) * 0.1 * ampRatio * m.adsr.value
+		m.out[i] = m.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * m.adsr.value
 	}
 }
 
@@ -189,10 +191,12 @@ func (p *polyOsc) calc(
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
 			freqRatio := 1.0
+			phaseShift := 0.0
 			ampRatio := 1.0
 			for _, lfo := range o.lfos {
-				_freqRatio, _ampRatio := lfo.step()
+				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc)
 				freqRatio *= _freqRatio
+				phaseShift += _phaseShift
 				ampRatio *= _ampRatio
 			}
 			for _, e := range events {
@@ -208,7 +212,7 @@ func (p *polyOsc) calc(
 				}
 			}
 			o.adsr.step()
-			p.out[i] += o.osc.step(freqRatio) * 0.1 * ampRatio * o.adsr.value
+			p.out[i] += o.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * o.adsr.value
 			if o.adsr.phase == "" {
 				p.active = append(p.active[:j], p.active[j+1:]...)
 				p.pooled = append(p.pooled, o)
@@ -291,9 +295,9 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	o.gliding = true
 	o.shiftPos = 0
 }
-func (o *osc) step(freqRatio float64) float64 {
+func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 	freq := o.freq * freqRatio
-	p := math.Mod(o.phase01, 1)
+	p := math.Mod(o.phase01+phaseShift/(2.0*math.Pi), 1)
 	value := 0.0
 	switch o.kind {
 	case "sine":
@@ -685,16 +689,23 @@ func (l *lfo) applyParams(p *lfoParams) {
 	l.amount = p.amount
 }
 
-func (l *lfo) step() (float64, float64) {
+func (l *lfo) step(career *osc) (float64, float64, float64) {
 	freqRatio := 1.0
+	phaseShift := 0.0
 	ampRatio := 1.0
 	switch l.destination {
 	case "vibrato":
-		freqRatio = math.Pow(2.0, l.osc.step(1.0)*l.amount/100/12)
+		freqRatio = math.Pow(2.0, l.osc.step(1.0, 0.0)*l.amount/100/12)
 	case "tremolo":
-		ampRatio = 1 - l.amount/2 + l.osc.step(1.0)*l.amount/2
+		ampRatio = 1 - l.amount/2 + l.osc.step(1.0, 0.0)*l.amount/2
+	case "fm":
+		freqRatio = math.Pow(2.0, l.osc.step(career.freq, 0.0)*l.amount/100/12)
+	case "pm":
+		phaseShift = l.osc.step(career.freq, 0.0) * l.amount
+	case "am":
+		ampRatio = 1 + l.osc.step(career.freq, 0.0)*l.amount
 	}
-	return freqRatio, ampRatio
+	return freqRatio, phaseShift, ampRatio
 }
 
 // ----- Audio ----- //
