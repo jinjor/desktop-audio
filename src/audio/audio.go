@@ -292,7 +292,7 @@ func noteToFreq(p *oscParams, note int) float64 {
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
-	o.note = note // temporary switch to enable wavetables
+	// o.note = note // temporary switch to enable wavetables
 	o.freq = noteToFreq(p, note)
 	o.phase01 = rand.Float64()
 }
