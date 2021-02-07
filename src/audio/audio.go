@@ -26,6 +26,7 @@ const bytesPerSample = bitDepthInBytes * channelNum
 const bufferSizeInBytes = samplesPerCycle * bytesPerSample // should be >= 4096
 const secPerSample = 1.0 / sampleRate
 const responseDelay = secPerSample * samplesPerCycle
+const baseFreq = 442
 
 var fft = NewFFT(fftSize, false)
 
@@ -277,7 +278,7 @@ type osc struct {
 }
 
 func noteToFreq(p *oscParams, note int) float64 {
-	return 442 * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
+	return baseFreq * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind

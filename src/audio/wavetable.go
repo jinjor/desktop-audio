@@ -47,7 +47,7 @@ func makeBandLimitedTableForGivenNumberOfPartials(samples int, partials int, cal
 	})
 }
 func makeBandLimitedTableWithMaxNumbersOfPartialsAtNote(samples int, note int, calcFourierPartialAtPhase func(n int, phase float64) float64) *wavetable {
-	freq := 442 * math.Pow(2, float64(note-69)/12)
+	freq := baseFreq * math.Pow(2, float64(note-69)/12)
 	partials := int(sampleRate / 2 / freq)
 	return makeBandLimitedTableForGivenNumberOfPartials(samples, partials, calcFourierPartialAtPhase)
 }
