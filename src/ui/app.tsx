@@ -486,7 +486,7 @@ const Spectrum = () => {
     const minFreq = 32;
     const fftData: number[] = [];
     const filterShapeData: number[] = [];
-    const render = () => {
+    const render = (command: 'fft' | 'filter-shape') => {
       const ctx = canvas.getContext("2d")!;
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, width, height);
@@ -499,7 +499,8 @@ const Spectrum = () => {
         maxFreq,
         minDb: -100,
         maxDb: -6,
-      });
+      },
+      command);
       renderFrequencyShape(ctx, filterShapeData, {
         color: "#66aadd",
         sampleRate,
@@ -509,19 +510,20 @@ const Spectrum = () => {
         maxFreq,
         minDb: -50,
         maxDb: 50,
-      });
+      },
+      command);
     };
     const callback = (_: any, command: string[]) => {
       if (command[0] === "fft") {
         for (let i = 1; i < command.length; i++) {
           fftData[i - 1] = parseFloat(command[i]);
         }
-        render();
+        render(command[0]);
       } else if (command[0] === "filter-shape") {
         for (let i = 1; i < command.length; i++) {
           filterShapeData[i - 1] = parseFloat(command[i]);
         }
-        render();
+        render(command[0]);
       }
     };
     ipcRenderer.on("audio", callback);
@@ -544,17 +546,21 @@ function renderFrequencyShape(
     maxFreq: number;
     minDb: number;
     maxDb: number;
-  }
+  },
+  command: 'fft' | 'filter-shape'
 ) {
   ctx.strokeStyle = o.color;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, o.height);
-  for (let i = 0; i < data.length; i++) {
+
+  const fftSize = 2 * data.length;
+  const frequencyBinCount = data.length;
+
+  for (let i = 0; i < frequencyBinCount; i++) {
     const value = data[i];
-    const freq = (o.sampleRate / 2) * (i / data.length);
-    const x =
-      (Math.log(freq / o.minFreq) / Math.log(o.maxFreq / o.minFreq)) * o.width;
+    const freq = (o.sampleRate / 2) * (i / frequencyBinCount);
+    const x = command === 'fft' ? freq * (o.width / frequencyBinCount) : (Math.log(freq / o.minFreq) / Math.log(o.maxFreq / o.minFreq)) * o.width;
     const db = 20 * Math.log10(value);
     const y = (1 - (db - o.minDb) / (o.maxDb - o.minDb)) * o.height;
     ctx.lineTo(x, y);
