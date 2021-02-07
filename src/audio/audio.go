@@ -269,6 +269,7 @@ func (o *oscParams) set(key string, value string) error {
 type osc struct {
 	kind      string
 	glideTime int // ms
+	note      int
 	freq      float64
 	phase01   float64
 	gliding   bool
@@ -277,11 +278,21 @@ type osc struct {
 	nextFreq  float64
 }
 
+var blsquareWT *WavetableSet = loadWavetableSet("work/square")
+var blsawWT *WavetableSet = loadWavetableSet("work/saw")
+
+func loadWavetableSet(path string) *WavetableSet {
+	wts := NewWavetableSet(128, 4096)
+	wts.Load(path)
+	return wts
+}
+
 func noteToFreq(p *oscParams, note int) float64 {
 	return baseFreq * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
+	o.note = note // temporary switch to enable wavetables
 	o.freq = noteToFreq(p, note)
 	o.phase01 = rand.Float64()
 }
@@ -310,10 +321,14 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 			value = p*(-4) + 3
 		}
 	case "square":
-		if p < 0.5 {
-			value = 1
+		if o.note > 0 {
+			value = blsquareWT.tables[o.note].getAtPhase(2.0 * math.Pi * p)
 		} else {
-			value = -1
+			if p < 0.5 {
+				value = 1
+			} else {
+				value = -1
+			}
 		}
 	case "pulse":
 		if p < 0.25 {
@@ -322,7 +337,11 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 			value = -1
 		}
 	case "saw":
-		value = p*2 - 1
+		if o.note > 0 {
+			value = blsawWT.tables[o.note].getAtPhase(2.0 * math.Pi * p)
+		} else {
+			value = p*2 - 1
+		}
 	case "saw-rev":
 		value = p*(-2) + 1
 	case "noise":

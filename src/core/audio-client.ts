@@ -17,8 +17,8 @@ export class AudioClient {
     const p = spawn("./dist/audio", [], {
       stdio: "inherit",
     });
-    const interval = 100;
-    const maxRetries = 10;
+    const interval = 200;
+    const maxRetries = 20;
     for (let i = 0; ; i++) {
       if (existsSync(sockPath)) {
         break;
