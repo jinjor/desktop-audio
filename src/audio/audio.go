@@ -19,7 +19,7 @@ const (
 	channelNum      = 2
 	bitDepthInBytes = 2
 	samplesPerCycle = 1024
-	fftSize         = 2048 // multiple of samplesPerCycle
+	fftSize         = 4096 // multiple of samplesPerCycle
 	maxPoly         = 128
 )
 const bytesPerSample = bitDepthInBytes * channelNum
