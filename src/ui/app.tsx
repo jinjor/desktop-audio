@@ -365,9 +365,12 @@ lfoDestinations.set("am", {
 });
 const LFO = (o: { index: number }) => {
   const list = [...lfoDestinations.keys()];
+  const initialDestination = lfoDestinations.get("none")!;
   const [value, setValue] = useState("none");
-  const [destination, setDestination] = useState(lfoDestinations.get("none")!);
-  const onChange = (value: string) => {
+  const [destination, setDestination] = useState(initialDestination);
+  const [freq, setFreq] = useState(initialDestination.defaultFreq);
+  const [amount, setAmount] = useState(initialDestination.defaultAmount);
+  const onChangeDestination = (value: string) => {
     const destination = lfoDestinations.get(value)!;
     ipcRenderer.send("audio", [
       "set",
@@ -378,12 +381,22 @@ const LFO = (o: { index: number }) => {
     ]);
     setValue(value);
     setDestination(destination);
+    setFreqWithIPC(destination.defaultFreq);
+    setAmountWithIPC(destination.defaultAmount);
+  };
+  const setFreqWithIPC = (value: number) => {
+    ipcRenderer.send("audio", ["set", "lfo", String(o.index), "freq", value]);
+    setFreq(value);
+  };
+  const setAmountWithIPC = (value: number) => {
+    ipcRenderer.send("audio", ["set", "lfo", String(o.index), "amount", value]);
+    setAmount(value);
   };
   return (
     <EditGroup label={`LFO ${o.index + 1}`}>
       <div style={{ display: "flex", gap: "12px" }}>
         <div>
-          <Radio list={list} value={value} onChange={onChange} />
+          <Radio list={list} value={value} onChange={onChangeDestination} />
         </div>
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
           <LFOWaveSelect index={o.index} />
@@ -391,14 +404,16 @@ const LFO = (o: { index: number }) => {
             index={o.index}
             min={destination.minFreq}
             max={destination.maxFreq}
-            value={destination.defaultFreq}
+            value={freq}
+            onInput={setFreqWithIPC}
           />
           <LFOAmount
             index={o.index}
             min={destination.minAmount}
             max={destination.maxAmount}
-            value={destination.defaultAmount}
+            value={amount}
             from={destination.fromAmount}
+            onInput={setAmountWithIPC}
           />
         </div>
       </div>
@@ -424,20 +439,16 @@ const LFOFreq = (o: {
   min: number;
   max: number;
   value: number;
+  onInput: (value: number) => void;
 }) => {
-  const [value, setValue] = useState(o.value);
-  const onInput = (value: number) => {
-    ipcRenderer.send("audio", ["set", "lfo", String(o.index), "freq", value]);
-    setValue(value);
-  };
   return (
     <LabeledKnob
       min={o.min}
       max={o.max}
       steps={400}
       exponential={false}
-      value={value}
-      onChange={onInput}
+      value={o.value}
+      onChange={o.onInput}
       label="Freq"
     />
   );
@@ -448,21 +459,17 @@ const LFOAmount = (o: {
   max: number;
   value: number;
   from: number;
+  onInput: (value: number) => void;
 }) => {
-  const [value, setValue] = useState(o.value);
-  const onInput = (value: number) => {
-    ipcRenderer.send("audio", ["set", "lfo", String(o.index), "amount", value]);
-    setValue(value);
-  };
   return (
     <LabeledKnob
       min={o.min}
       max={o.max}
       steps={400}
       exponential={false}
-      value={value}
+      value={o.value}
       from={o.from}
-      onChange={onInput}
+      onChange={o.onInput}
       label="Amount"
     />
   );
