@@ -54,10 +54,11 @@ export const Knob = (o: KnobOptions) => {
     y: number;
   } | null>(null);
   const size = 40;
-  const v = (o.value - o.min) / (o.max - o.min);
-  const from = ((o.from ?? o.min) - o.min) / (o.max - o.min);
+  const range = o.max - o.min;
+  const v = range === 0 ? o.min : (o.value - o.min) / range;
+  const from = range === 0 ? o.min : ((o.from ?? o.min) - o.min) / range;
   const onInput = (v: number) => {
-    o.onChange(o.min + (o.max - o.min) * v);
+    o.onChange(o.min + range * v);
   };
   return (
     <KnobHandler
