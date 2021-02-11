@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 )
 
 const sockFileName = "/tmp/desktop-audio.sock"
+const dataFileName = "work/data.json"
 
 func main() {
 	flag.Parse()
@@ -36,6 +38,17 @@ func main() {
 		log.Fatalf("error: %v\n", err)
 	}
 	defer a.Close()
+
+	// commented out until UI gets ready...
+	//
+	// bytes, err := ioutil.ReadFile(dataFileName)
+	// if err != nil {
+	// 	log.Println(err)
+	// 	log.Println("failed to load data at", dataFileName)
+	// } else {
+	// 	log.Println("loaded data at", dataFileName)
+	// 	a.ApplyJSON(bytes)
+	// }
 
 	midiIn := audio.ListenToMidiIn(ctx)
 	go func() {
@@ -65,6 +78,9 @@ func main() {
 		})
 		g.Go(func() error {
 			return sendReports(ctx, conn, a)
+		})
+		g.Go(func() error {
+			return saveData(ctx, a)
 		})
 		return g.Wait()
 	})
@@ -198,5 +214,28 @@ loop:
 		}
 	}
 	log.Println("sendReports() ended.")
+	return nil
+}
+
+func saveData(ctx context.Context, audio *audio.Audio) error {
+	t := time.NewTicker(time.Second / 2)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("saveData() interrupted")
+			break loop
+		case _ = <-t.C:
+			if audio.Changes.Has("data") {
+				audio.Changes.Delete("data")
+				j := audio.ToJSON()
+				log.Println(string(j))
+				ioutil.WriteFile(dataFileName, j, 0666)
+				log.Println("saved data at", dataFileName)
+			}
+		}
+	}
+	log.Println("saveData() ended.")
 	return nil
 }
