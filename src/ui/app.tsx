@@ -60,7 +60,16 @@ const WaveSelect = () => {
   };
   return (
     <Radio
-      list={["sine", "triangle", "square", "pulse", "saw", "noise"]}
+      list={[
+        "sine",
+        "triangle",
+        "square",
+        "square-wt",
+        "pulse",
+        "saw",
+        "saw-wt",
+        "saw-rev",
+      ]}
       value={value}
       onChange={onChange}
     />
@@ -428,7 +437,16 @@ const LFOWaveSelect = (o: { index: number }) => {
   };
   return (
     <Radio
-      list={["sine", "triangle", "square", "pulse", "saw", "saw-rev"]}
+      list={[
+        "sine",
+        "triangle",
+        "square",
+        "square-wt",
+        "pulse",
+        "saw",
+        "saw-wt",
+        "saw-rev",
+      ]}
       value={value}
       onChange={onChange}
     />

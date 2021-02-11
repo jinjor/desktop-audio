@@ -26,7 +26,7 @@ const bytesPerSample = bitDepthInBytes * channelNum
 const bufferSizeInBytes = samplesPerCycle * bytesPerSample // should be >= 4096
 const secPerSample = 1.0 / sampleRate
 const responseDelay = secPerSample * samplesPerCycle
-const baseFreq = 442
+const baseFreq = 442.0
 
 var fft = NewFFT(fftSize, false)
 
@@ -43,6 +43,19 @@ func positiveMod(a float64, b float64) float64 {
 		a += b
 	}
 	return math.Mod(a, b)
+}
+func noteToFreq(note int) float64 {
+	return baseFreq * math.Pow(2, float64(note-69)/12)
+}
+func freqToNote(freq float64) int {
+	note := int(math.Log2(freq/baseFreq)*12.0) + 69
+	if note < 0 {
+		note = 0
+	}
+	if note >= 128 {
+		note = 127
+	}
+	return note
 }
 
 // ----- MIDI Event ----- //
@@ -278,7 +291,6 @@ func (o *oscParams) set(key string, value string) error {
 type osc struct {
 	kind      string
 	glideTime int // ms
-	note      int
 	freq      float64
 	phase01   float64
 	gliding   bool
@@ -295,18 +307,16 @@ func loadWavetableSet(path string) *WavetableSet {
 	wts.Load(path)
 	return wts
 }
-
-func noteToFreq(p *oscParams, note int) float64 {
-	return baseFreq * math.Pow(2, float64(note+p.octave*12+p.coarse+p.fine/100-69)/12)
+func noteWithParamsToFreq(p *oscParams, note int) float64 {
+	return noteToFreq(note) * math.Pow(2, float64(p.octave+p.coarse+p.fine/100/12))
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
-	// o.note = note // temporary switch to enable wavetables
-	o.freq = noteToFreq(p, note)
+	o.freq = noteWithParamsToFreq(p, note)
 	o.phase01 = rand.Float64()
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
-	nextFreq := noteToFreq(p, note)
+	nextFreq := noteWithParamsToFreq(p, note)
 	if math.Abs(nextFreq-o.freq) < 0.001 {
 		return
 	}
@@ -330,15 +340,14 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 			value = p*(-4) + 3
 		}
 	case "square":
-		if o.note > 0 {
-			value = blsquareWT.tables[o.note].getAtPhase(2.0 * math.Pi * p)
+		if p < 0.5 {
+			value = 1
 		} else {
-			if p < 0.5 {
-				value = 1
-			} else {
-				value = -1
-			}
+			value = -1
 		}
+	case "square-wt":
+		note := freqToNote(freq)
+		value = blsquareWT.tables[note].getAtPhase(2.0 * math.Pi * p)
 	case "pulse":
 		if p < 0.25 {
 			value = 1
@@ -346,11 +355,10 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 			value = -1
 		}
 	case "saw":
-		if o.note > 0 {
-			value = blsawWT.tables[o.note].getAtPhase(2.0 * math.Pi * p)
-		} else {
-			value = p*2 - 1
-		}
+		value = p*2 - 1
+	case "saw-wt":
+		note := freqToNote(freq)
+		value = blsawWT.tables[note].getAtPhase(2.0 * math.Pi * p)
 	case "saw-rev":
 		value = p*(-2) + 1
 	case "noise":
