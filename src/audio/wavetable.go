@@ -28,7 +28,7 @@ func (wt *wavetable) generate(samples int, phaseToValue func(phase float64) floa
 	return nil
 }
 func (wt *wavetable) getAtPhase(phase float64) float64 {
-	phase = math.Mod(phase, 2.0*math.Pi)
+	phase = positiveMod(phase, 2.0*math.Pi)
 	length := len(wt.values)
 	phasePerSample := 2.0 * math.Pi / float64(length)
 	index := int(phase / phasePerSample)

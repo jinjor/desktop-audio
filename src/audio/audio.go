@@ -35,6 +35,15 @@ var fft = NewFFT(fftSize, false)
 func now() float64 {
 	return float64(time.Now().UnixNano()) / 1000 / 1000 / 1000
 }
+func positiveMod(a float64, b float64) float64 {
+	if b < 0 {
+		panic("b should not be negative")
+	}
+	for a < 0 {
+		a += b
+	}
+	return math.Mod(a, b)
+}
 
 // ----- MIDI Event ----- //
 
@@ -309,7 +318,7 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 }
 func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 	freq := o.freq * freqRatio
-	p := math.Mod(o.phase01+phaseShift/(2.0*math.Pi), 1)
+	p := positiveMod(o.phase01+phaseShift/(2.0*math.Pi), 1)
 	value := 0.0
 	switch o.kind {
 	case "sine":
