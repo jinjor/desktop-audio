@@ -2,6 +2,7 @@ package audio
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -56,6 +57,13 @@ func freqToNote(freq float64) int {
 		note = 127
 	}
 	return note
+}
+func toRawMessage(v interface{}) json.RawMessage {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return json.RawMessage(bytes)
 }
 
 // ----- MIDI Event ----- //
@@ -261,7 +269,33 @@ type oscParams struct {
 	coarse int // -12 ~ 12
 	fine   int // -100 ~ 100 cent
 }
+type oscJSON struct {
+	Kind   string `json:"kind"`
+	Octave int    `json:"octave"`
+	Coarse int    `json:"coarse"`
+	Fine   int    `json:"fine"`
+}
 
+func (o *oscParams) applyJSON(data json.RawMessage) {
+	var j oscJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to oscParams")
+		return
+	}
+	o.kind = j.Kind
+	o.octave = j.Octave
+	o.coarse = j.Coarse
+	o.fine = j.Fine
+}
+func (o *oscParams) toJSON() json.RawMessage {
+	return toRawMessage(&oscJSON{
+		Kind:   o.kind,
+		Octave: o.octave,
+		Coarse: o.coarse,
+		Fine:   o.fine,
+	})
+}
 func (o *oscParams) set(key string, value string) error {
 	switch key {
 	case "kind":
@@ -386,7 +420,33 @@ type adsrParams struct {
 	sustain float64 // 0-1
 	release float64 // ms
 }
+type adsrJSON struct {
+	Attack  float64 `json:"attack"`
+	Decay   float64 `json:"decay"`
+	Sustain float64 `json:"sustain"`
+	Release float64 `json:"release"`
+}
 
+func (a *adsrParams) applyJSON(data json.RawMessage) {
+	var j adsrJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to adsrParams")
+		return
+	}
+	a.attack = j.Attack
+	a.decay = j.Decay
+	a.sustain = j.Sustain
+	a.release = j.Release
+}
+func (a *adsrParams) toJSON() json.RawMessage {
+	return toRawMessage(&adsrJSON{
+		Attack:  a.attack,
+		Decay:   a.decay,
+		Sustain: a.sustain,
+		Release: a.release,
+	})
+}
 func (a *adsrParams) set(key string, value string) error {
 	switch key {
 	case "attack":
@@ -529,6 +589,33 @@ type filter struct {
 	b    []float64 // feedback
 	past []float64
 }
+type filterJSON struct {
+	Kind string  `json:"kind"`
+	Freq float64 `json:"freq"`
+	Q    float64 `json:"q"`
+	Gain float64 `json:"gain"`
+}
+
+func (f *filter) applyJSON(data json.RawMessage) {
+	var j filterJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to filter")
+		return
+	}
+	f.kind = j.Kind
+	f.freq = j.Freq
+	f.q = j.Q
+	f.gain = j.Gain
+}
+func (f *filter) toJSON() json.RawMessage {
+	return toRawMessage(&filterJSON{
+		Kind: f.kind,
+		Freq: f.freq,
+		Q:    f.q,
+		Gain: f.gain,
+	})
+}
 
 func (f *filter) process(in []float64, out []float64) {
 	if len(f.a) == 0 {
@@ -656,6 +743,37 @@ type lfoParams struct {
 	amount      float64
 }
 
+type lfoJSON struct {
+	Destination string  `json:"destination"`
+	Wave        string  `json:"wave"`
+	FreqType    string  `json:"freqType"`
+	Freq        float64 `json:"freq"`
+	Amount      float64 `json:"amount"`
+}
+
+func (l *lfoParams) applyJSON(data json.RawMessage) {
+	var j lfoJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to adsrParams")
+		return
+	}
+	l.destination = j.Destination
+	l.wave = j.Wave
+	l.freqType = j.FreqType
+	l.freq = j.Freq
+	l.amount = j.Amount
+}
+func (l *lfoParams) toJSON() json.RawMessage {
+	return toRawMessage(&lfoJSON{
+		Destination: l.destination,
+		Wave:        l.wave,
+		FreqType:    l.freqType,
+		Freq:        l.freq,
+		Amount:      l.amount,
+	})
+}
+
 func newLfoParams() *lfoParams {
 	return &lfoParams{
 		destination: "none",
@@ -745,19 +863,7 @@ func (l *lfo) step(career *osc) (float64, float64, float64) {
 	return freqRatio, phaseShift, ampRatio
 }
 
-// ----- Audio ----- //
-
-// Audio ...
-type Audio struct {
-	ctx        context.Context
-	otoContext *oto.Context
-	CommandCh  chan []string
-	state      *state
-	Changes    *Changes
-	fftResult  []float64 // length: fftSize
-}
-
-var _ io.Reader = (*Audio)(nil)
+// ----- Changes ----- //
 
 // Changes ...
 type Changes struct {
@@ -787,6 +893,8 @@ func (c *Changes) Delete(key string) {
 	c.Unlock()
 }
 
+// ----- State ----- //
+
 type state struct {
 	sync.Mutex
 	events     [][]*midiEvent // length: samplesPerCycle * 2
@@ -798,10 +906,112 @@ type state struct {
 	monoOsc    *monoOsc
 	polyOsc    *polyOsc
 	filter     *filter
-	// lfos       []*lfo
-	pos      int64
-	out      []float64 // length: fftSize
-	lastRead float64
+	pos        int64
+	out        []float64 // length: fftSize
+	lastRead   float64
+}
+type stateJSON struct {
+	// TODO: polyMode, glideTime
+	Osc    json.RawMessage   `json:"osc"`
+	Adsr   json.RawMessage   `json:"adsr"`
+	Lfos   []json.RawMessage `json:"lfos"`
+	Filter json.RawMessage   `json:"filter"`
+}
+
+func (s *state) applyJSON(data json.RawMessage) {
+	var j stateJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to state")
+		return
+	}
+	s.oscParams.applyJSON(j.Osc)
+	s.adsrParams.applyJSON(j.Adsr)
+	if len(j.Lfos) == len(s.lfoParams) {
+		for i, j := range j.Lfos {
+			s.lfoParams[i].applyJSON(j)
+		}
+	} else {
+		log.Println("failed to apply JSON to lfo params")
+	}
+	s.filter.applyJSON(j.Filter)
+}
+func (s *state) toJSON() json.RawMessage {
+	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
+	for i, lfoParam := range s.lfoParams {
+		lfoJsons[i] = lfoParam.toJSON()
+	}
+	return toRawMessage(&stateJSON{
+		Osc:    s.oscParams.toJSON(),
+		Adsr:   s.adsrParams.toJSON(),
+		Lfos:   lfoJsons,
+		Filter: s.filter.toJSON(),
+	})
+}
+
+func newState() *state {
+	return &state{
+		events:     make([][]*midiEvent, samplesPerCycle*2),
+		oscParams:  &oscParams{kind: "sine"},
+		adsrParams: &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
+		lfoParams:  []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
+		polyMode:   false,
+		glideTime:  100,
+		monoOsc:    newMonoOsc(),
+		polyOsc:    newPolyOsc(),
+		filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
+		pos:        0,
+		out:        make([]float64, fftSize),
+	}
+}
+
+// ----- Audio ----- //
+
+// Audio ...
+type Audio struct {
+	ctx        context.Context
+	otoContext *oto.Context
+	CommandCh  chan []string
+	state      *state
+	Changes    *Changes
+	fftResult  []float64 // length: fftSize
+}
+
+var _ io.Reader = (*Audio)(nil)
+
+type audioJSON struct {
+	State json.RawMessage `json:"state"`
+	// additional context...
+}
+
+// ApplyJSON ...
+func (a *Audio) ApplyJSON(data []byte) {
+	a.state.Lock()
+	defer a.state.Unlock()
+	var audioJSON audioJSON
+	err := json.Unmarshal(data, &audioJSON)
+	if err != nil {
+		log.Println("failed to apply JSON to Audio", err)
+		return
+	}
+	a.state.applyJSON(audioJSON.State)
+}
+
+// ToJSON ...
+func (a *Audio) ToJSON() []byte {
+	a.state.Lock()
+	defer a.state.Unlock()
+	bytes, err := json.Marshal(a.toJSON())
+	if err != nil {
+		panic(err)
+	}
+	return bytes
+}
+
+func (a *Audio) toJSON() json.RawMessage {
+	return toRawMessage(&audioJSON{
+		State: a.state.toJSON(),
+	})
 }
 
 func (a *Audio) Read(buf []byte) (int, error) {
@@ -868,19 +1078,7 @@ func NewAudio() (*Audio, error) {
 		ctx:        context.Background(),
 		otoContext: otoContext,
 		CommandCh:  commandCh,
-		state: &state{
-			events:     make([][]*midiEvent, samplesPerCycle*2),
-			oscParams:  &oscParams{kind: "sine"},
-			adsrParams: &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
-			lfoParams:  []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
-			polyMode:   false,
-			glideTime:  100,
-			monoOsc:    newMonoOsc(),
-			polyOsc:    newPolyOsc(),
-			filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
-			pos:        0,
-			out:        make([]float64, fftSize),
-		},
+		state:      newState(),
 		Changes: &Changes{
 			dict: make(map[string]struct{}),
 		},
