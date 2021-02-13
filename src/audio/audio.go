@@ -911,11 +911,12 @@ type state struct {
 	lastRead   float64
 }
 type stateJSON struct {
-	// TODO: polyMode, glideTime
-	Osc    json.RawMessage   `json:"osc"`
-	Adsr   json.RawMessage   `json:"adsr"`
-	Lfos   []json.RawMessage `json:"lfos"`
-	Filter json.RawMessage   `json:"filter"`
+	Poly      string            `json:"poly"`
+	GlideTime int               `json:"glideTime"`
+	Osc       json.RawMessage   `json:"osc"`
+	Adsr      json.RawMessage   `json:"adsr"`
+	Lfos      []json.RawMessage `json:"lfos"`
+	Filter    json.RawMessage   `json:"filter"`
 }
 
 func (s *state) applyJSON(data json.RawMessage) {
@@ -925,6 +926,8 @@ func (s *state) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to state")
 		return
 	}
+	s.polyMode = j.Poly == "poly"
+	s.glideTime = j.GlideTime
 	s.oscParams.applyJSON(j.Osc)
 	s.adsrParams.applyJSON(j.Adsr)
 	if len(j.Lfos) == len(s.lfoParams) {
@@ -941,11 +944,17 @@ func (s *state) toJSON() json.RawMessage {
 	for i, lfoParam := range s.lfoParams {
 		lfoJsons[i] = lfoParam.toJSON()
 	}
+	poly := "mono"
+	if s.polyMode {
+		poly = "poly"
+	}
 	return toRawMessage(&stateJSON{
-		Osc:    s.oscParams.toJSON(),
-		Adsr:   s.adsrParams.toJSON(),
-		Lfos:   lfoJsons,
-		Filter: s.filter.toJSON(),
+		Poly:      poly,
+		GlideTime: s.glideTime,
+		Osc:       s.oscParams.toJSON(),
+		Adsr:      s.adsrParams.toJSON(),
+		Lfos:      lfoJsons,
+		Filter:    s.filter.toJSON(),
 	})
 }
 
@@ -1172,6 +1181,7 @@ func (a *Audio) update(command []string) {
 	default:
 		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
+	a.Changes.Add("data")
 }
 
 // Close ...

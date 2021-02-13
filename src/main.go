@@ -39,16 +39,15 @@ func main() {
 	}
 	defer a.Close()
 
-	// commented out until UI gets ready...
-	//
-	// bytes, err := ioutil.ReadFile(dataFileName)
-	// if err != nil {
-	// 	log.Println(err)
-	// 	log.Println("failed to load data at", dataFileName)
-	// } else {
-	// 	log.Println("loaded data at", dataFileName)
-	// 	a.ApplyJSON(bytes)
-	// }
+	bytes, err := ioutil.ReadFile(dataFileName)
+	if err != nil {
+		log.Println(err)
+		log.Println("failed to load data at", dataFileName)
+	} else {
+		log.Println("loaded data at", dataFileName)
+		a.ApplyJSON(bytes)
+	}
+	a.Changes.Add("all_params") // always exists
 
 	midiIn := audio.ListenToMidiIn(ctx)
 	go func() {
@@ -175,6 +174,12 @@ loop:
 			log.Println("sendReports() interrupted")
 			break loop
 		case _ = <-t.C:
+			if audio.Changes.Has("all_params") {
+				audio.Changes.Delete("all_params")
+				j := audio.ToJSON()
+				s := "all_params " + url.QueryEscape(string(j))
+				conn.Write([]byte(s + "\n"))
+			}
 			if audio.Changes.Has("fft") {
 				audio.Changes.Delete("fft")
 				result := audio.GetFFT()

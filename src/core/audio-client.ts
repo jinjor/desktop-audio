@@ -51,7 +51,7 @@ export class AudioClient {
     });
     rl.on("line", (line) => {
       if (this.onMessage != null) {
-        const command = line.split(/\s+/).map(decodeURI);
+        const command = line.split(/\s+/).map(decodeURIComponent);
         this.onMessage(command);
       }
     });
@@ -61,6 +61,6 @@ export class AudioClient {
     if (this.client == null || !this.connected) {
       throw new Error("connection is closed");
     }
-    this.client.write(`${command.map(encodeURI).join(" ")}\n`);
+    this.client.write(`${command.map(encodeURIComponent).join(" ")}\n`);
   }
 }
