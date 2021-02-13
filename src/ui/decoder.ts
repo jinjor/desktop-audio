@@ -217,3 +217,5 @@ export function strAsBoolean(): Decoder<boolean> {
     throw new DecodeError(s + " is not a boolean!");
   });
 }
+
+export type TypeOf<T> = T extends Decoder<infer A> ? A : never;

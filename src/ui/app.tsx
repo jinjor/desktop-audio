@@ -1,6 +1,12 @@
 import { ipcRenderer } from "electron";
 import ReactDOM from "react-dom";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useReducer,
+} from "react";
 import { Notes } from "./note";
 import { LabeledKnob } from "./knob";
 import { Radio } from "./radio";
@@ -24,14 +30,18 @@ const EditGroup = (o: { label: string; children: any }) => {
 };
 
 const Poly = React.memo(
-  (o: { onChange: (value: string) => void; value: string }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: string }) => {
+    const onChange = (value: string) =>
+      o.dispatch({ type: "changedPoly", value });
     return (
-      <Radio list={["mono", "poly"]} value={o.value} onChange={o.onChange} />
+      <Radio list={["mono", "poly"]} value={o.value} onChange={onChange} />
     );
   }
 );
 const GlideTime = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedGlideTime", value });
     const min = 1;
     const max = 400;
     const steps = max - min + 1;
@@ -43,14 +53,16 @@ const GlideTime = React.memo(
         from={0}
         exponential={true}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Glide"
       />
     );
   }
 );
 const OscKind = React.memo(
-  (o: { onChange: (value: string) => void; value: string }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: string }) => {
+    const onChange = (value: string) =>
+      o.dispatch({ type: "changedOscKind", value });
     return (
       <Radio
         list={[
@@ -64,13 +76,15 @@ const OscKind = React.memo(
           "saw-rev",
         ]}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
       />
     );
   }
 );
 const Octave = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedOscOctave", value });
     const min = -2;
     const max = 2;
     const steps = max - min + 1;
@@ -82,14 +96,16 @@ const Octave = React.memo(
         from={0}
         exponential={true}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Octave"
       />
     );
   }
 );
 const Coarse = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedOscCoarse", value });
     const min = -12;
     const max = 12;
     const steps = max - min + 1;
@@ -101,14 +117,16 @@ const Coarse = React.memo(
         exponential={true}
         value={o.value}
         from={0}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Coarse"
       />
     );
   }
 );
 const Fine = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedOscFine", value });
     const min = -100;
     const max = 100;
     const steps = max - min + 1;
@@ -120,14 +138,16 @@ const Fine = React.memo(
         exponential={true}
         value={o.value}
         from={0}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Fine"
       />
     );
   }
 );
 const Attack = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedAdsrAttack", value });
     return (
       <LabeledKnob
         min={0}
@@ -135,14 +155,16 @@ const Attack = React.memo(
         steps={400}
         exponential={true}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Attack"
       />
     );
   }
 );
 const Decay = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedAdsrDecay", value });
     return (
       <LabeledKnob
         min={0}
@@ -150,14 +172,16 @@ const Decay = React.memo(
         steps={400}
         exponential={true}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Decay"
       />
     );
   }
 );
 const Sustain = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedAdsrSustain", value });
     return (
       <LabeledKnob
         min={0}
@@ -165,14 +189,16 @@ const Sustain = React.memo(
         steps={400}
         exponential={false}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Sustain"
       />
     );
   }
 );
 const Release = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedAdsrRelease", value });
     return (
       <LabeledKnob
         min={0}
@@ -180,14 +206,16 @@ const Release = React.memo(
         steps={400}
         exponential={true}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Release"
       />
     );
   }
 );
 const FilterKind = React.memo(
-  (o: { onChange: (value: string) => void; value: string }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: string }) => {
+    const onChange = (value: string) =>
+      o.dispatch({ type: "changedFilterKind", value });
     return (
       <Radio
         list={[
@@ -204,13 +232,15 @@ const FilterKind = React.memo(
           "highshelf",
         ]}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
       />
     );
   }
 );
 const FilterFreq = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedFilterFreq", value });
     return (
       <LabeledKnob
         min={30}
@@ -218,14 +248,16 @@ const FilterFreq = React.memo(
         steps={400}
         exponential={true}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Freq"
       />
     );
   }
 );
 const FilterQ = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedFilterQ", value });
     return (
       <LabeledKnob
         min={0}
@@ -233,14 +265,16 @@ const FilterQ = React.memo(
         steps={400}
         exponential={false}
         value={o.value}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Q"
       />
     );
   }
 );
 const FilterGain = React.memo(
-  (o: { onChange: (value: number) => void; value: number }) => {
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedFilterGain", value });
     return (
       <LabeledKnob
         min={-40}
@@ -249,7 +283,7 @@ const FilterGain = React.memo(
         exponential={false}
         value={o.value}
         from={0}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Gain"
       />
     );
@@ -346,23 +380,29 @@ const useCallbackWithIndex = <T,>(
   return useCallback((value: T) => f(index, value), [index, f]);
 };
 const LFOGroup = React.memo(
-  (o: {
-    index: number;
-    value: LFO;
-    onChangeDestination: (index: number, value: string) => void;
-    onChangeWave: (index: number, value: string) => void;
-    onChangeFreq: (index: number, value: number) => void;
-    onChangeAmount: (index: number, value: number) => void;
-  }) => {
+  (o: { index: number; value: LFO; dispatch: React.Dispatch<Action> }) => {
     const list = [...lfoDestinations.keys()];
     const destination = lfoDestinations.get(o.value.destination)!;
     const onChangeDestination = useCallbackWithIndex(
       o.index,
-      o.onChangeDestination
+      (index: number, value: string) =>
+        o.dispatch({ type: "changedLFODestination", index, value })
     );
-    const onChangeWave = useCallbackWithIndex(o.index, o.onChangeWave);
-    const onChangeFreq = useCallbackWithIndex(o.index, o.onChangeFreq);
-    const onChangeAmount = useCallbackWithIndex(o.index, o.onChangeAmount);
+    const onChangeWave = useCallbackWithIndex(
+      o.index,
+      (index: number, value: string) =>
+        o.dispatch({ type: "changedLFOWave", index, value })
+    );
+    const onChangeFreq = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedLFOFreq", index, value })
+    );
+    const onChangeAmount = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedLFOAmount", index, value })
+    );
     return (
       <EditGroup label={`LFO ${o.index + 1}`}>
         <div style={{ display: "flex", gap: "12px" }}>
@@ -585,223 +625,263 @@ const stateDecoder = d.object({
     gain: d.number(),
   }),
 });
+type State = d.TypeOf<typeof stateDecoder>;
+type Action =
+  | { type: "receivedCommand"; command: string[] }
+  | { type: "changedPoly"; value: string }
+  | { type: "changedGlideTime"; value: number }
+  | { type: "changedOscKind"; value: string }
+  | { type: "changedOscOctave"; value: number }
+  | { type: "changedOscCoarse"; value: number }
+  | { type: "changedOscFine"; value: number }
+  | { type: "changedAdsrAttack"; value: number }
+  | { type: "changedAdsrDecay"; value: number }
+  | { type: "changedAdsrSustain"; value: number }
+  | { type: "changedAdsrRelease"; value: number }
+  | { type: "changedLFODestination"; index: number; value: string }
+  | { type: "changedLFOWave"; index: number; value: string }
+  | { type: "changedLFOFreq"; index: number; value: number }
+  | { type: "changedLFOAmount"; index: number; value: number }
+  | { type: "changedFilterKind"; value: string }
+  | { type: "changedFilterFreq"; value: number }
+  | { type: "changedFilterQ"; value: number }
+  | { type: "changedFilterGain"; value: number };
+
 const App = () => {
+  const initialState: State = {
+    poly: "mono",
+    glideTime: 100,
+    osc: {
+      kind: "sine",
+      octave: 0,
+      coarse: 0,
+      fine: 0,
+    },
+    adsr: {
+      attack: 0,
+      decay: 100,
+      sustain: 0.7,
+      release: 200,
+    },
+    lfos: [defaultLFO, defaultLFO, defaultLFO],
+    filter: {
+      kind: "none",
+      freq: 1000,
+      q: 0,
+      gain: 0,
+    },
+  };
+  const [state, dispatch] = useReducer((state: State, action: Action) => {
+    switch (action.type) {
+      case "receivedCommand": {
+        const { command } = action;
+        if (command[0] === "all_params") {
+          const obj = JSON.parse(command[1]);
+          return stateDecoder.run(obj.state);
+        } else {
+          return state;
+        }
+      }
+      case "changedPoly": {
+        const { value } = action;
+        ipcRenderer.send("audio", [value]);
+        return { ...state, poly: value };
+      }
+      case "changedGlideTime": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "glide_time", value]);
+        return { ...state, glideTime: value };
+      }
+      case "changedOscKind": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "osc", "kind", value]);
+        return { ...state, osc: { ...state.osc, kind: value } };
+      }
+      case "changedOscOctave": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "osc", "octave", value]);
+        return { ...state, osc: { ...state.osc, octave: value } };
+      }
+      case "changedOscCoarse": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "osc", "coarse", value]);
+        return { ...state, osc: { ...state.osc, coarse: value } };
+      }
+      case "changedOscFine": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "osc", "fine", value]);
+        return { ...state, osc: { ...state.osc, fine: value } };
+      }
+      case "changedAdsrAttack": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "adsr", "attack", value]);
+        return { ...state, adsr: { ...state.adsr, attack: value } };
+      }
+      case "changedAdsrDecay": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "adsr", "decay", value]);
+        return { ...state, adsr: { ...state.adsr, decay: value } };
+      }
+      case "changedAdsrSustain": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "adsr", "sustain", value]);
+        return { ...state, adsr: { ...state.adsr, sustain: value } };
+      }
+      case "changedAdsrRelease": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "adsr", "release", value]);
+        return { ...state, adsr: { ...state.adsr, release: value } };
+      }
+      case "changedLFODestination": {
+        const { index, value } = action;
+        const { defaultFreq, defaultAmount } = lfoDestinations.get(value)!;
+        ipcRenderer.send("audio", [
+          "set",
+          "lfo",
+          String(index),
+          "destination",
+          value,
+        ]);
+        ipcRenderer.send("audio", [
+          "set",
+          "lfo",
+          String(index),
+          "freq",
+          defaultFreq,
+        ]);
+        ipcRenderer.send("audio", [
+          "set",
+          "lfo",
+          String(index),
+          "amount",
+          defaultAmount,
+        ]);
+        return {
+          ...state,
+          lfos: setItem(state.lfos, index, {
+            destination: value,
+            freq: defaultFreq,
+            amount: defaultAmount,
+          }),
+        };
+      }
+      case "changedLFOWave": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", ["set", "lfo", String(index), "wave", value]);
+        return {
+          ...state,
+          lfos: setItem(state.lfos, index, { wave: value }),
+        };
+      }
+      case "changedLFOFreq": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", ["set", "lfo", String(index), "freq", value]);
+        return {
+          ...state,
+          lfos: setItem(state.lfos, index, { freq: value }),
+        };
+      }
+      case "changedLFOAmount": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "lfo",
+          String(index),
+          "amount",
+          value,
+        ]);
+        return {
+          ...state,
+          lfos: setItem(state.lfos, index, { amount: value }),
+        };
+      }
+      case "changedFilterKind": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "filter", "kind", value]);
+        return {
+          ...state,
+          filter: { ...state.filter, kind: value },
+        };
+      }
+      case "changedFilterFreq": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "filter", "freq", value]);
+        return {
+          ...state,
+          filter: { ...state.filter, freq: value },
+        };
+      }
+      case "changedFilterQ": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "filter", "q", value]);
+        return {
+          ...state,
+          filter: { ...state.filter, q: value },
+        };
+      }
+      case "changedFilterGain": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "filter", "gain", value]);
+        return {
+          ...state,
+          filter: { ...state.filter, gain: value },
+        };
+      }
+    }
+  }, initialState);
   useEffect(() => {
     const callback = (_: any, command: string[]) => {
-      if (command[0] === "all_params") {
-        const obj = JSON.parse(command[1]);
-        const state = stateDecoder.run(obj.state);
-        setPoly(state.poly);
-        setGlideTime(state.glideTime);
-        setOscKind(state.osc.kind);
-        setOctave(state.osc.octave);
-        setCoarse(state.osc.coarse);
-        setFine(state.osc.fine);
-        setAttack(state.adsr.attack);
-        setDecay(state.adsr.decay);
-        setSustain(state.adsr.sustain);
-        setRelease(state.adsr.release);
-        setLFOs(state.lfos);
-        setFilterKind(state.filter.kind);
-        setFilterFreq(state.filter.freq);
-        setFilterQ(state.filter.q);
-        setFilterGain(state.filter.gain);
-      }
+      dispatch({ type: "receivedCommand", command });
     };
     ipcRenderer.on("audio", callback);
     return () => {
       ipcRenderer.off("audio", callback);
     };
   }, []);
-  const [poly, setPoly] = useState("mono");
-  const [glideTime, setGlideTime] = useState(100);
-  const onChangePoly = useCallback((value: string) => {
-    ipcRenderer.send("audio", [value]);
-    setPoly(value);
-  }, []);
-  const onChangeGlideTime = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "glide_time", value]);
-    setGlideTime(value);
-  }, []);
-
-  const [oscKind, setOscKind] = useState("sine");
-  const [octave, setOctave] = useState(0);
-  const [coarse, setCoarse] = useState(0);
-  const [fine, setFine] = useState(0);
-  const onChangeOscKind = useCallback((value: string) => {
-    ipcRenderer.send("audio", ["set", "osc", "kind", value]);
-    setOscKind(value);
-  }, []);
-  const onChangeOctave = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "osc", "octave", value]);
-    setOctave(value);
-  }, []);
-  const onChangeCoarse = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "osc", "coarse", value]);
-    setCoarse(value);
-  }, []);
-  const onChangeFine = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "osc", "fine", value]);
-    setFine(value);
-  }, []);
-
-  const [attack, setAttack] = useState(10);
-  const [decay, setDecay] = useState(100);
-  const [sustain, setSustain] = useState(0.7);
-  const [release, setRelease] = useState(200);
-  const onChangeAttack = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "adsr", "attack", value]);
-    setAttack(value);
-  }, []);
-  const onChangeDecay = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "adsr", "decay", value]);
-    setDecay(value);
-  }, []);
-  const onChangeSustain = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "adsr", "sustain", value]);
-    setSustain(value);
-  }, []);
-  const onChangeRelease = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "adsr", "release", value]);
-    setRelease(value);
-  }, []);
-
-  const [lfos, setLFOs] = useState([defaultLFO, defaultLFO, defaultLFO]);
-  const onChangeLFODestination = useCallback(
-    (i: number, value: string) => {
-      const { defaultFreq, defaultAmount } = lfoDestinations.get(value)!;
-      setLFOs(
-        setItem(lfos, i, {
-          destination: value,
-          freq: defaultFreq,
-          amount: defaultAmount,
-        })
-      );
-      ipcRenderer.send("audio", [
-        "set",
-        "lfo",
-        String(i),
-        "destination",
-        value,
-      ]);
-      ipcRenderer.send("audio", ["set", "lfo", String(i), "freq", defaultFreq]);
-      ipcRenderer.send("audio", [
-        "set",
-        "lfo",
-        String(i),
-        "amount",
-        defaultAmount,
-      ]);
-    },
-    [lfos]
-  );
-  const onChangeLFOWave = useCallback(
-    (i: number, wave: string) => {
-      ipcRenderer.send("audio", ["set", "lfo", String(i), "wave", wave]);
-      setLFOs(setItem(lfos, i, { wave }));
-    },
-    [lfos]
-  );
-  const onChangeLFOFreq = useCallback(
-    (i: number, freq: number) => {
-      ipcRenderer.send("audio", ["set", "lfo", String(i), "freq", freq]);
-      setLFOs(setItem(lfos, i, { freq }));
-    },
-    [lfos]
-  );
-  const onChangeLFOAmount = useCallback(
-    (i: number, amount: number) => {
-      ipcRenderer.send("audio", ["set", "lfo", String(i), "amount", amount]);
-      setLFOs(setItem(lfos, i, { amount }));
-    },
-    [lfos]
-  );
-
-  const [filterKind, setFilterKind] = useState("none");
-  const [filterFreq, setFilterFreq] = useState(1000);
-  const [filterQ, setFilterQ] = useState(0);
-  const [filterGain, setFilterGain] = useState(0);
-  const onChangeFilterKind = useCallback((value: string) => {
-    ipcRenderer.send("audio", ["set", "filter", "kind", value]);
-    setFilterKind(value);
-  }, []);
-  const onChangeFilterFreq = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "filter", "freq", value]);
-    setFilterFreq(value);
-  }, []);
-  const onChangeFilterQ = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "filter", "q", value]);
-    setFilterQ(value);
-  }, []);
-  const onChangeFilterGain = useCallback((value: number) => {
-    ipcRenderer.send("audio", ["set", "filter", "gain", value]);
-    setFilterGain(value);
-  }, []);
   return (
     <React.Fragment>
       <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
         <EditGroup label="POLY">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <Poly value={poly} onChange={onChangePoly} />
-            <GlideTime value={glideTime} onChange={onChangeGlideTime} />
+            <Poly value={state.poly} dispatch={dispatch} />
+            <GlideTime value={state.glideTime} dispatch={dispatch} />
           </div>
         </EditGroup>
         <EditGroup label="OSC">
           <div style={{ display: "flex", gap: "12px" }}>
             <div>
-              <OscKind value={oscKind} onChange={onChangeOscKind} />
+              <OscKind value={state.osc.kind} dispatch={dispatch} />
             </div>
             <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-              <Octave value={octave} onChange={onChangeOctave} />
-              <Coarse value={coarse} onChange={onChangeCoarse} />
-              <Fine value={fine} onChange={onChangeFine} />
+              <Octave value={state.osc.octave} dispatch={dispatch} />
+              <Coarse value={state.osc.coarse} dispatch={dispatch} />
+              <Fine value={state.osc.fine} dispatch={dispatch} />
             </div>
           </div>
         </EditGroup>
         <EditGroup label="Envelope">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <Attack value={attack} onChange={onChangeAttack} />
-            <Decay value={decay} onChange={onChangeDecay} />
-            <Sustain value={sustain} onChange={onChangeSustain} />
-            <Release value={release} onChange={onChangeRelease} />
+            <Attack value={state.adsr.attack} dispatch={dispatch} />
+            <Decay value={state.adsr.decay} dispatch={dispatch} />
+            <Sustain value={state.adsr.sustain} dispatch={dispatch} />
+            <Release value={state.adsr.release} dispatch={dispatch} />
           </div>
         </EditGroup>
         <EditGroup label="FILTER">
           <div style={{ display: "flex", gap: "12px" }}>
             <div>
-              <FilterKind onChange={onChangeFilterKind} value={filterKind} />
+              <FilterKind dispatch={dispatch} value={state.filter.kind} />
             </div>
             <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-              <FilterFreq onChange={onChangeFilterFreq} value={filterFreq} />
-              <FilterQ onChange={onChangeFilterQ} value={filterQ} />
-              <FilterGain onChange={onChangeFilterGain} value={filterGain} />
+              <FilterFreq dispatch={dispatch} value={state.filter.freq} />
+              <FilterQ dispatch={dispatch} value={state.filter.q} />
+              <FilterGain dispatch={dispatch} value={state.filter.gain} />
             </div>
           </div>
         </EditGroup>
-        <LFOGroup
-          index={0}
-          value={lfos[0]}
-          onChangeDestination={onChangeLFODestination}
-          onChangeWave={onChangeLFOWave}
-          onChangeFreq={onChangeLFOFreq}
-          onChangeAmount={onChangeLFOAmount}
-        />
-        <LFOGroup
-          index={1}
-          value={lfos[1]}
-          onChangeDestination={onChangeLFODestination}
-          onChangeWave={onChangeLFOWave}
-          onChangeFreq={onChangeLFOFreq}
-          onChangeAmount={onChangeLFOAmount}
-        />
-        <LFOGroup
-          index={2}
-          value={lfos[2]}
-          onChangeDestination={onChangeLFODestination}
-          onChangeWave={onChangeLFOWave}
-          onChangeFreq={onChangeLFOFreq}
-          onChangeAmount={onChangeLFOAmount}
-        />
+        <LFOGroup index={0} value={state.lfos[0]} dispatch={dispatch} />
+        <LFOGroup index={1} value={state.lfos[1]} dispatch={dispatch} />
+        <LFOGroup index={2} value={state.lfos[2]} dispatch={dispatch} />
       </div>
       <Notes />
       <Spectrum />
