@@ -1,12 +1,6 @@
 import { ipcRenderer } from "electron";
 import ReactDOM from "react-dom";
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useReducer,
-} from "react";
+import React, { useEffect, useRef, useCallback, useReducer } from "react";
 import { Notes } from "./note";
 import { LabeledKnob } from "./knob";
 import { Radio } from "./radio";
@@ -73,7 +67,7 @@ const OscKind = React.memo(
           "pulse",
           "saw",
           "saw-wt",
-          "saw-rev",
+          "noise",
         ]}
         value={o.value}
         onChange={onChange}
@@ -496,6 +490,114 @@ const LFOAmount = React.memo(
     );
   }
 );
+
+type EnvelopeDestination = {
+  minDelay: number;
+  maxDelay: number;
+  defaultDelay: number;
+};
+const envelopeDestinations = new Map<string, EnvelopeDestination>();
+envelopeDestinations.set("none", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
+for (let i = 0; i < 3; i++) {
+  envelopeDestinations.set(`lfo${i}_amount`, {
+    minDelay: 0,
+    maxDelay: 1000,
+    defaultDelay: 200,
+  });
+}
+type Envelope = {
+  destination: string;
+  delay: number;
+  attack: number;
+};
+const defaultEnvelope = {
+  destination: "none",
+  delay: 0,
+  attack: 0,
+};
+const EnvelopeGroup = React.memo(
+  (o: { index: number; value: Envelope; dispatch: React.Dispatch<Action> }) => {
+    const list = [...envelopeDestinations.keys()];
+    const destination = envelopeDestinations.get(o.value.destination)!;
+    const onChangeDestination = useCallbackWithIndex(
+      o.index,
+      (index: number, value: string) =>
+        o.dispatch({ type: "changedEnvelopeDestination", index, value })
+    );
+    const onChangeDelay = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedEnvelopeDelay", index, value })
+    );
+    const onChangeAttack = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedEnvelopeAttack", index, value })
+    );
+    return (
+      <EditGroup label={`Envelope ${o.index + 1}`}>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <div>
+            <Radio
+              list={list}
+              value={o.value.destination}
+              onChange={onChangeDestination}
+            />
+          </div>
+          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+            <EnvelopeDelay
+              min={destination.minDelay}
+              max={destination.maxDelay}
+              value={o.value.delay}
+              onChange={onChangeDelay}
+            />
+            <EnvelopeAttack value={o.value.attack} onChange={onChangeAttack} />
+          </div>
+        </div>
+      </EditGroup>
+    );
+  }
+);
+const EnvelopeDelay = React.memo(
+  (o: {
+    min: number;
+    max: number;
+    value: number;
+    onChange: (value: number) => void;
+  }) => {
+    return (
+      <LabeledKnob
+        min={o.min}
+        max={o.max}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        onChange={o.onChange}
+        label="Delay"
+      />
+    );
+  }
+);
+const EnvelopeAttack = React.memo(
+  (o: { value: number; onChange: (value: number) => void }) => {
+    return (
+      <LabeledKnob
+        min={0}
+        max={1000}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        onChange={o.onChange}
+        label="Attack"
+      />
+    );
+  }
+);
+
 const Canvas = (props: {
   listen: (canvas: HTMLCanvasElement) => () => void;
   [key: string]: any;
@@ -618,6 +720,13 @@ const stateDecoder = d.object({
       amount: d.number(),
     })
   ),
+  envelopes: d.array(
+    d.object({
+      destination: d.string(),
+      delay: d.number(),
+      attack: d.number(),
+    })
+  ),
   filter: d.object({
     kind: d.string(),
     freq: d.number(),
@@ -642,6 +751,9 @@ type Action =
   | { type: "changedLFOWave"; index: number; value: string }
   | { type: "changedLFOFreq"; index: number; value: number }
   | { type: "changedLFOAmount"; index: number; value: number }
+  | { type: "changedEnvelopeDestination"; index: number; value: string }
+  | { type: "changedEnvelopeDelay"; index: number; value: number }
+  | { type: "changedEnvelopeAttack"; index: number; value: number }
   | { type: "changedFilterKind"; value: string }
   | { type: "changedFilterFreq"; value: number }
   | { type: "changedFilterQ"; value: number }
@@ -664,6 +776,7 @@ const App = () => {
       release: 200,
     },
     lfos: [defaultLFO, defaultLFO, defaultLFO],
+    envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],
     filter: {
       kind: "none",
       freq: 1000,
@@ -677,6 +790,7 @@ const App = () => {
         const { command } = action;
         if (command[0] === "all_params") {
           const obj = JSON.parse(command[1]);
+          console.log(obj);
           return stateDecoder.run(obj.state);
         } else {
           return state;
@@ -795,6 +909,54 @@ const App = () => {
           lfos: setItem(state.lfos, index, { amount: value }),
         };
       }
+      case "changedEnvelopeDestination": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "envelope",
+          String(index),
+          "destination",
+          value,
+        ]);
+        return {
+          ...state,
+          envelopes: setItem(state.envelopes, index, {
+            destination: value,
+          }),
+        };
+      }
+      case "changedEnvelopeDelay": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "envelope",
+          String(index),
+          "delay",
+          value,
+        ]);
+        return {
+          ...state,
+          envelopes: setItem(state.envelopes, index, {
+            delay: value,
+          }),
+        };
+      }
+      case "changedEnvelopeAttack": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "envelope",
+          String(index),
+          "attack",
+          value,
+        ]);
+        return {
+          ...state,
+          envelopes: setItem(state.envelopes, index, {
+            attack: value,
+          }),
+        };
+      }
       case "changedFilterKind": {
         const { value } = action;
         ipcRenderer.send("audio", ["set", "filter", "kind", value]);
@@ -882,6 +1044,21 @@ const App = () => {
         <LFOGroup index={0} value={state.lfos[0]} dispatch={dispatch} />
         <LFOGroup index={1} value={state.lfos[1]} dispatch={dispatch} />
         <LFOGroup index={2} value={state.lfos[2]} dispatch={dispatch} />
+        <EnvelopeGroup
+          index={0}
+          value={state.envelopes[0]}
+          dispatch={dispatch}
+        />
+        <EnvelopeGroup
+          index={1}
+          value={state.envelopes[1]}
+          dispatch={dispatch}
+        />
+        <EnvelopeGroup
+          index={2}
+          value={state.envelopes[2]}
+          dispatch={dispatch}
+        />
       </div>
       <Notes />
       <Spectrum />

@@ -96,10 +96,7 @@ export function pattern(regex: RegExp): Decoder<string> {
   };
 }
 
-export function optional<T>(
-  d: Decoder<T>,
-  defaultValue?: T
-): Decoder<T | undefined> {
+export function optional<T>(d: Decoder<T>, defaultValue: T): Decoder<T> {
   return {
     run(value: unknown) {
       if (value == null) {

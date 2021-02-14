@@ -85,6 +85,7 @@ type monoOsc struct {
 	osc         *osc
 	adsr        *adsr
 	lfos        []*lfo
+	envelopes   []*adsr
 	activeNotes []int
 	out         []float64 // length: samplesPerCycle
 }
@@ -94,6 +95,7 @@ func newMonoOsc() *monoOsc {
 		osc:         &osc{phase01: rand.Float64()},
 		adsr:        &adsr{},
 		lfos:        []*lfo{newLfo(), newLfo(), newLfo()},
+		envelopes:   []*adsr{{}, {}, {}},
 		activeNotes: make([]int, 0, 128),
 		out:         make([]float64, samplesPerCycle),
 	}
@@ -104,10 +106,14 @@ func (m *monoOsc) calc(
 	oscParams *oscParams,
 	adsrParams *adsrParams,
 	lfoParams []*lfoParams,
+	envelopeParams []*envelopeParams,
 	glideTime int,
 ) {
 	for i, lfo := range m.lfos {
 		lfo.applyParams(lfoParams[i])
+	}
+	for i, envelope := range m.envelopes {
+		envelope.applyEnvelopeParams(envelopeParams[i])
 	}
 	m.adsr.setParams(adsrParams)
 	for i := int64(0); i < int64(len(m.out)); i++ {
@@ -144,6 +150,9 @@ func (m *monoOsc) calc(
 				}
 			}
 		}
+		for _, envelope := range m.envelopes {
+			envelope.step()
+		}
 		m.adsr.step()
 		freqRatio := 1.0
 		phaseShift := 0.0
@@ -161,17 +170,18 @@ func (m *monoOsc) calc(
 // ----- POLY OSC ----- //
 
 type polyOsc struct {
-	oscs []*oscWithADSRAndLFO
+	oscs []*noteOsc
 	out  []float64 // length: samplesPerCycle
 }
 
 func newPolyOsc() *polyOsc {
-	oscs := make([]*oscWithADSRAndLFO, 128)
+	oscs := make([]*noteOsc, 128)
 	for i := 0; i < len(oscs); i++ {
-		oscs[i] = &oscWithADSRAndLFO{
-			osc:  &osc{phase01: rand.Float64()},
-			adsr: &adsr{},
-			lfos: []*lfo{newLfo(), newLfo(), newLfo()},
+		oscs[i] = &noteOsc{
+			osc:       &osc{phase01: rand.Float64()},
+			adsr:      &adsr{},
+			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
+			envelopes: []*adsr{{}, {}, {}},
 		}
 	}
 	return &polyOsc{
@@ -185,10 +195,14 @@ func (p *polyOsc) calc(
 	oscParams *oscParams,
 	adsrParams *adsrParams,
 	lfoParams []*lfoParams,
+	envelopeParams []*envelopeParams,
 ) {
 	for _, o := range p.oscs {
 		for i, lfo := range o.lfos {
 			lfo.applyParams(lfoParams[i])
+		}
+		for i, envelope := range o.envelopes {
+			envelope.applyEnvelopeParams(envelopeParams[i])
 		}
 	}
 	for i := int64(0); i < int64(len(p.out)); i++ {
@@ -212,6 +226,9 @@ func (p *polyOsc) calc(
 			if o.adsr.phase == "" {
 				continue
 			}
+			for _, envelope := range o.envelopes {
+				envelope.step()
+			}
 			freqRatio := 1.0
 			phaseShift := 0.0
 			ampRatio := 1.0
@@ -227,13 +244,14 @@ func (p *polyOsc) calc(
 	}
 }
 
-// ----- OSC WITH ADSR ----- //
+// ----- NOTE OSC ----- //
 
-type oscWithADSRAndLFO struct {
-	note int
-	osc  *osc
-	adsr *adsr
-	lfos []*lfo
+type noteOsc struct {
+	note      int
+	osc       *osc
+	adsr      *adsr
+	lfos      []*lfo
+	envelopes []*adsr
 }
 
 // ----- OSC ----- //
@@ -483,6 +501,9 @@ func (a *adsr) setParams(p *adsrParams) {
 	a.sustain = p.sustain
 	a.release = p.release
 }
+func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
+	// TODO
+}
 
 func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
 	for i := range out {
@@ -712,6 +733,65 @@ func (f *filter) set(key string, value string) error {
 	return nil
 }
 
+// ----- Envelope ----- //
+
+type envelopeParams struct {
+	destination string
+	delay       float64
+	attack      float64
+}
+
+type envelopeJSON struct {
+	Destination string  `json:"destination"`
+	Delay       float64 `json:"delay"`
+	Attack      float64 `json:"attack"`
+}
+
+func (l *envelopeParams) applyJSON(data json.RawMessage) {
+	var j envelopeJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to envelopeParams")
+		return
+	}
+	l.destination = j.Destination
+	l.delay = j.Delay
+	l.attack = j.Attack
+}
+func (l *envelopeParams) toJSON() json.RawMessage {
+	return toRawMessage(&envelopeJSON{
+		Destination: l.destination,
+		Delay:       l.delay,
+		Attack:      l.attack,
+	})
+}
+func newEnvelopeParams() *envelopeParams {
+	return &envelopeParams{
+		destination: "none",
+		delay:       0,
+		attack:      0,
+	}
+}
+func (l *envelopeParams) set(key string, value string) error {
+	switch key {
+	case "destination":
+		l.destination = value
+	case "delay":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.delay = value
+	case "attack":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.attack = value
+	}
+	return nil
+}
+
 // ----- LFO ----- //
 
 type lfoParams struct {
@@ -763,24 +843,25 @@ func newLfoParams() *lfoParams {
 	}
 }
 
-func (l *lfoParams) initByDestination(destination string) {
-	l.destination = destination
-	switch destination {
-	case "vibrato":
-		l.freqType = "absolute"
-		l.freq = 0
-		l.amount = 0
-	case "tremolo":
-		l.freqType = "absolute"
-		l.freq = 0
-		l.amount = 0
-	}
-}
+// func (l *lfoParams) initByDestination(destination string) {
+// 	l.destination = destination
+// 	switch destination {
+// 	case "vibrato":
+// 		l.freqType = "absolute"
+// 		l.freq = 0
+// 		l.amount = 0
+// 	case "tremolo":
+// 		l.freqType = "absolute"
+// 		l.freq = 0
+// 		l.amount = 0
+// 	}
+// }
 
 func (l *lfoParams) set(key string, value string) error {
 	switch key {
 	case "destination":
-		l.initByDestination(value)
+		// l.initByDestination(value)
+		l.destination = value
 	case "wave":
 		l.wave = value
 	case "freq":
@@ -876,18 +957,19 @@ func (c *Changes) Delete(key string) {
 
 type state struct {
 	sync.Mutex
-	events     [][]*midiEvent // length: samplesPerCycle * 2
-	oscParams  *oscParams
-	adsrParams *adsrParams
-	lfoParams  []*lfoParams
-	polyMode   bool
-	glideTime  int // ms
-	monoOsc    *monoOsc
-	polyOsc    *polyOsc
-	filter     *filter
-	pos        int64
-	out        []float64 // length: fftSize
-	lastRead   float64
+	events         [][]*midiEvent // length: samplesPerCycle * 2
+	oscParams      *oscParams
+	adsrParams     *adsrParams
+	lfoParams      []*lfoParams
+	envelopeParams []*envelopeParams
+	polyMode       bool
+	glideTime      int // ms
+	monoOsc        *monoOsc
+	polyOsc        *polyOsc
+	filter         *filter
+	pos            int64
+	out            []float64 // length: fftSize
+	lastRead       float64
 }
 type stateJSON struct {
 	Poly      string            `json:"poly"`
@@ -895,6 +977,7 @@ type stateJSON struct {
 	Osc       json.RawMessage   `json:"osc"`
 	Adsr      json.RawMessage   `json:"adsr"`
 	Lfos      []json.RawMessage `json:"lfos"`
+	Envelopes []json.RawMessage `json:"envelopes"`
 	Filter    json.RawMessage   `json:"filter"`
 }
 
@@ -916,12 +999,23 @@ func (s *state) applyJSON(data json.RawMessage) {
 	} else {
 		log.Println("failed to apply JSON to lfo params")
 	}
+	if len(j.Envelopes) == len(s.envelopeParams) {
+		for i, j := range j.Envelopes {
+			s.envelopeParams[i].applyJSON(j)
+		}
+	} else {
+		log.Println("failed to apply JSON to lfo params")
+	}
 	s.filter.applyJSON(j.Filter)
 }
 func (s *state) toJSON() json.RawMessage {
 	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
 	for i, lfoParam := range s.lfoParams {
 		lfoJsons[i] = lfoParam.toJSON()
+	}
+	envelopeJsons := make([]json.RawMessage, len(s.envelopeParams))
+	for i, envelopeParam := range s.envelopeParams {
+		envelopeJsons[i] = envelopeParam.toJSON()
 	}
 	poly := "mono"
 	if s.polyMode {
@@ -933,23 +1027,25 @@ func (s *state) toJSON() json.RawMessage {
 		Osc:       s.oscParams.toJSON(),
 		Adsr:      s.adsrParams.toJSON(),
 		Lfos:      lfoJsons,
+		Envelopes: envelopeJsons,
 		Filter:    s.filter.toJSON(),
 	})
 }
 
 func newState() *state {
 	return &state{
-		events:     make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:  &oscParams{kind: "sine"},
-		adsrParams: &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
-		lfoParams:  []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
-		polyMode:   false,
-		glideTime:  100,
-		monoOsc:    newMonoOsc(),
-		polyOsc:    newPolyOsc(),
-		filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
-		pos:        0,
-		out:        make([]float64, fftSize),
+		events:         make([][]*midiEvent, samplesPerCycle*2),
+		oscParams:      &oscParams{kind: "sine"},
+		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
+		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
+		envelopeParams: []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
+		polyMode:       false,
+		glideTime:      100,
+		monoOsc:        newMonoOsc(),
+		polyOsc:        newPolyOsc(),
+		filter:         &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
+		pos:            0,
+		out:            make([]float64, fftSize),
 	}
 }
 
@@ -1016,10 +1112,10 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams)
+			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams)
 			a.state.filter.process(a.state.polyOsc.out, out)
 		} else {
-			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.glideTime)
+			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime)
 			a.state.filter.process(a.state.monoOsc.out, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
@@ -1140,11 +1236,28 @@ func (a *Audio) update(command []string) {
 			if err != nil {
 				panic(err)
 			}
+		case "envelope":
+			command = command[1:]
+			index, err := strconv.ParseInt(command[0], 10, 64)
+			if err != nil {
+				panic(err)
+			}
+			command = command[1:]
+			if len(command) != 2 {
+				panic(fmt.Errorf("invalid key-value pair %v", command))
+			}
+			err = a.state.envelopeParams[index].set(command[0], command[1])
+			if err != nil {
+				panic(err)
+			}
 		}
+		a.Changes.Add("data")
 	case "mono":
 		a.state.polyMode = false
+		a.Changes.Add("data")
 	case "poly":
 		a.state.polyMode = true
+		a.Changes.Add("data")
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
@@ -1160,7 +1273,6 @@ func (a *Audio) update(command []string) {
 	default:
 		panic(fmt.Errorf("unknown command %v", command[0]))
 	}
-	a.Changes.Add("data")
 }
 
 // Close ...
