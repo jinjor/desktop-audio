@@ -773,7 +773,7 @@ const App = () => {
       attack: 0,
       decay: 100,
       sustain: 0.7,
-      release: 200,
+      release: 100,
     },
     lfos: [defaultLFO, defaultLFO, defaultLFO],
     envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],

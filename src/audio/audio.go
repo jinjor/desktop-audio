@@ -21,6 +21,7 @@ const (
 	bitDepthInBytes = 2
 	samplesPerCycle = 1024
 	fftSize         = 2048 // multiple of samplesPerCycle
+	maxPoly         = 128
 )
 const bytesPerSample = bitDepthInBytes * channelNum
 const bufferSizeInBytes = samplesPerCycle * bytesPerSample // should be >= 4096
@@ -170,11 +171,115 @@ func (m *monoOsc) calc(
 // ----- POLY OSC ----- //
 
 type polyOsc struct {
+	// pooled + active = maxPoly
+	pooled []*noteOsc
+	active []*noteOsc
+	out    []float64 // length: samplesPerCycle
+}
+
+func newPolyOsc() *polyOsc {
+	pooled := make([]*noteOsc, maxPoly)
+	for i := 0; i < len(pooled); i++ {
+		pooled[i] = &noteOsc{
+			osc:       &osc{phase01: rand.Float64()},
+			adsr:      &adsr{},
+			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
+			envelopes: []*adsr{{}, {}, {}},
+		}
+	}
+	return &polyOsc{
+		pooled: pooled,
+		out:    make([]float64, samplesPerCycle),
+	}
+}
+
+func (p *polyOsc) calc(
+	events [][]*midiEvent,
+	oscParams *oscParams,
+	adsrParams *adsrParams,
+	lfoParams []*lfoParams,
+	envelopeParams []*envelopeParams,
+) {
+	for _, o := range p.active {
+		for i, lfo := range o.lfos {
+			lfo.applyParams(lfoParams[i])
+		}
+		for i, envelope := range o.envelopes {
+			envelope.applyEnvelopeParams(envelopeParams[i])
+		}
+	}
+	for _, o := range p.pooled {
+		for i, lfo := range o.lfos {
+			lfo.applyParams(lfoParams[i])
+		}
+		for i, envelope := range o.envelopes {
+			envelope.applyEnvelopeParams(envelopeParams[i])
+		}
+	}
+	for i := int64(0); i < int64(len(p.out)); i++ {
+		p.out[i] = 0
+		events := events[i]
+		for j := 0; j < len(events); j++ {
+			switch data := events[j].event.(type) {
+			case *noteOn:
+				lenPooled := len(p.pooled)
+				if lenPooled > 0 {
+					o := p.pooled[lenPooled-1]
+					p.pooled = p.pooled[:lenPooled-1]
+					p.active = append(p.active, o)
+					o.note = data.note
+					o.osc.initWithNote(oscParams, data.note)
+					o.adsr.init(adsrParams)
+				} else {
+					log.Println("maxPoly exceeded")
+				}
+			}
+		}
+
+		for j := len(p.active) - 1; j >= 0; j-- {
+			o := p.active[j]
+			for _, envelope := range o.envelopes {
+				envelope.step()
+			}
+			freqRatio := 1.0
+			phaseShift := 0.0
+			ampRatio := 1.0
+			for _, lfo := range o.lfos {
+				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc)
+				freqRatio *= _freqRatio
+				phaseShift += _phaseShift
+				ampRatio *= _ampRatio
+			}
+			for _, e := range events {
+				switch data := e.event.(type) {
+				case *noteOff:
+					if data.note == o.note {
+						o.adsr.noteOff()
+					}
+				case *noteOn:
+					if data.note == o.note {
+						o.adsr.noteOn()
+					}
+				}
+			}
+			o.adsr.step()
+			p.out[i] += o.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * o.adsr.value
+			if o.adsr.phase == "" {
+				p.active = append(p.active[:j], p.active[j+1:]...)
+				p.pooled = append(p.pooled, o)
+			}
+		}
+	}
+}
+
+// ----- POLY OSC V2 ----- //
+
+type polyOsc2 struct {
 	oscs []*noteOsc
 	out  []float64 // length: samplesPerCycle
 }
 
-func newPolyOsc() *polyOsc {
+func newPolyOsc2() *polyOsc2 {
 	oscs := make([]*noteOsc, 128)
 	for i := 0; i < len(oscs); i++ {
 		oscs[i] = &noteOsc{
@@ -184,13 +289,13 @@ func newPolyOsc() *polyOsc {
 			envelopes: []*adsr{{}, {}, {}},
 		}
 	}
-	return &polyOsc{
+	return &polyOsc2{
 		oscs: oscs,
 		out:  make([]float64, samplesPerCycle),
 	}
 }
 
-func (p *polyOsc) calc(
+func (p *polyOsc2) calc(
 	events [][]*midiEvent,
 	oscParams *oscParams,
 	adsrParams *adsrParams,
@@ -1004,7 +1109,7 @@ func (s *state) applyJSON(data json.RawMessage) {
 			s.envelopeParams[i].applyJSON(j)
 		}
 	} else {
-		log.Println("failed to apply JSON to lfo params")
+		log.Println("failed to apply JSON to envelope params")
 	}
 	s.filter.applyJSON(j.Filter)
 }
