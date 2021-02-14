@@ -643,7 +643,7 @@ func (a *adsr) step() {
 	switch a.phase {
 	case "attack":
 		t := phaseTime / float64(a.attack)
-		a.value = t*1 + (1-t)*a.valueAtNoteOn
+		a.value = t*1 + (1-t)*a.valueAtNoteOn // TODO: don't use the same attack time
 		if t >= 1 {
 			a.phase = "decay"
 			a.phasePos = 0
