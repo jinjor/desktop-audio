@@ -28,6 +28,7 @@ const bufferSizeInBytes = samplesPerCycle * bytesPerSample // should be >= 4096
 const secPerSample = 1.0 / sampleRate
 const responseDelay = secPerSample * samplesPerCycle
 const baseFreq = 442.0
+const oscGain = 0.07
 
 var fft = NewFFT(fftSize, false)
 
@@ -164,7 +165,7 @@ func (m *monoOsc) calc(
 			phaseShift += _phaseShift
 			ampRatio *= _ampRatio
 		}
-		m.out[i] = m.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * m.adsr.value
+		m.out[i] = m.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * m.adsr.value
 	}
 }
 
@@ -263,7 +264,7 @@ func (p *polyOsc) calc(
 				}
 			}
 			o.adsr.step()
-			p.out[i] += o.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * o.adsr.value
+			p.out[i] += o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 			if o.adsr.phase == "" {
 				p.active = append(p.active[:j], p.active[j+1:]...)
 				p.pooled = append(p.pooled, o)
@@ -344,7 +345,7 @@ func (p *polyOsc2) calc(
 				ampRatio *= _ampRatio
 			}
 			o.adsr.step()
-			p.out[i] += o.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * o.adsr.value
+			p.out[i] += o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 		}
 	}
 }
