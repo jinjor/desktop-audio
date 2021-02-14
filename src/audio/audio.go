@@ -252,6 +252,75 @@ func (p *polyOsc) calc(
 	}
 }
 
+// ----- POLY OSC V2 ----- //
+
+type polyOsc2 struct {
+	oscs []*oscWithADSRAndLFO
+	out  []float64 // length: samplesPerCycle
+}
+
+func newPolyOsc2() *polyOsc2 {
+	oscs := make([]*oscWithADSRAndLFO, 128)
+	for i := 0; i < len(oscs); i++ {
+		oscs[i] = &oscWithADSRAndLFO{
+			osc:  &osc{phase01: rand.Float64()},
+			adsr: &adsr{},
+			lfos: []*lfo{newLfo(), newLfo(), newLfo()},
+		}
+	}
+	return &polyOsc2{
+		oscs: oscs,
+		out:  make([]float64, samplesPerCycle),
+	}
+}
+
+func (p *polyOsc2) calc(
+	events [][]*midiEvent,
+	oscParams *oscParams,
+	adsrParams *adsrParams,
+	lfoParams []*lfoParams,
+) {
+	for _, o := range p.oscs {
+		for i, lfo := range o.lfos {
+			lfo.applyParams(lfoParams[i])
+		}
+	}
+	for i := int64(0); i < int64(len(p.out)); i++ {
+		p.out[i] = 0
+		events := events[i]
+		for j := 0; j < len(events); j++ {
+			switch data := events[j].event.(type) {
+			case *noteOn:
+				o := p.oscs[data.note]
+				o.note = data.note
+				o.osc.initWithNoteWithoutRandomizePhase(oscParams, data.note)
+				o.adsr.setParams(adsrParams)
+				o.adsr.noteOn()
+			case *noteOff:
+				o := p.oscs[data.note]
+				o.adsr.noteOff()
+			}
+		}
+		for j := len(p.oscs) - 1; j >= 0; j-- {
+			o := p.oscs[j]
+			if o.adsr.phase == "" {
+				continue
+			}
+			freqRatio := 1.0
+			phaseShift := 0.0
+			ampRatio := 1.0
+			for _, lfo := range o.lfos {
+				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc)
+				freqRatio *= _freqRatio
+				phaseShift += _phaseShift
+				ampRatio *= _ampRatio
+			}
+			o.adsr.step()
+			p.out[i] += o.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * o.adsr.value
+		}
+	}
+}
+
 // ----- OSC WITH ADSR ----- //
 
 type oscWithADSRAndLFO struct {
@@ -348,6 +417,10 @@ func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
 	o.freq = noteWithParamsToFreq(p, note)
 	o.phase01 = rand.Float64()
+}
+func (o *osc) initWithNoteWithoutRandomizePhase(p *oscParams, note int) {
+	o.kind = p.kind
+	o.freq = noteWithParamsToFreq(p, note)
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	nextFreq := noteWithParamsToFreq(p, note)
@@ -904,7 +977,7 @@ type state struct {
 	polyMode   bool
 	glideTime  int // ms
 	monoOsc    *monoOsc
-	polyOsc    *polyOsc
+	polyOsc    *polyOsc2
 	filter     *filter
 	pos        int64
 	out        []float64 // length: fftSize
@@ -967,7 +1040,7 @@ func newState() *state {
 		polyMode:   false,
 		glideTime:  100,
 		monoOsc:    newMonoOsc(),
-		polyOsc:    newPolyOsc(),
+		polyOsc:    newPolyOsc2(),
 		filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 		pos:        0,
 		out:        make([]float64, fftSize),
