@@ -21,7 +21,6 @@ const (
 	bitDepthInBytes = 2
 	samplesPerCycle = 1024
 	fftSize         = 2048 // multiple of samplesPerCycle
-	maxPoly         = 128
 )
 const bytesPerSample = bitDepthInBytes * channelNum
 const bufferSizeInBytes = samplesPerCycle * bytesPerSample // should be >= 4096
