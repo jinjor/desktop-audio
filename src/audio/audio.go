@@ -475,15 +475,15 @@ func (a *adsrParams) set(key string, value string) error {
 }
 
 type adsr struct {
-	attack       float64 // ms
-	decay        float64 // ms
-	sustain      float64 // 0-1
-	release      float64 // ms
-	value        float64
-	phase        string // "attack", "decay", "sustain", "release" nil
-	phasePos     int
-	attackValue  float64
-	releaseValue float64
+	attack         float64 // ms
+	decay          float64 // ms
+	sustain        float64 // 0-1
+	release        float64 // ms
+	value          float64
+	phase          string // "attack", "decay", "sustain", "release" nil
+	phasePos       int
+	valueAtNoteOn  float64
+	valueAtNoteOff float64
 }
 
 func (a *adsr) init(p *adsrParams) {
@@ -491,8 +491,8 @@ func (a *adsr) init(p *adsrParams) {
 	a.value = 0
 	a.phase = ""
 	a.phasePos = 0
-	a.attackValue = 0
-	a.releaseValue = 0
+	a.valueAtNoteOn = 0
+	a.valueAtNoteOff = 0
 }
 
 func (a *adsr) setParams(p *adsrParams) {
@@ -523,13 +523,13 @@ func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
 func (a *adsr) noteOn() {
 	a.phase = "attack"
 	a.phasePos = 0
-	a.attackValue = a.value
+	a.valueAtNoteOn = a.value
 }
 
 func (a *adsr) noteOff() {
 	a.phase = "release"
 	a.phasePos = 0
-	a.releaseValue = a.value
+	a.valueAtNoteOff = a.value
 }
 
 func (a *adsr) step() {
@@ -537,7 +537,7 @@ func (a *adsr) step() {
 	switch a.phase {
 	case "attack":
 		t := phaseTime / float64(a.attack)
-		a.value = t*1 + (1-t)*a.attackValue
+		a.value = t*1 + (1-t)*a.valueAtNoteOn
 		if t >= 1 {
 			a.phase = "decay"
 			a.phasePos = 0
@@ -559,7 +559,7 @@ func (a *adsr) step() {
 		a.value = float64(a.sustain)
 	case "release":
 		t := phaseTime / float64(a.release)
-		a.value = setTargetAtTime(a.releaseValue, 0.0, t)
+		a.value = setTargetAtTime(a.valueAtNoteOff, 0.0, t)
 		if a.value < 0.001 {
 			a.phase = ""
 			a.phasePos = 0
