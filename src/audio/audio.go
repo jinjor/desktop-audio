@@ -162,104 +162,11 @@ func (m *monoOsc) calc(
 // ----- POLY OSC ----- //
 
 type polyOsc struct {
-	// pooled + active = maxPoly
-	pooled []*oscWithADSRAndLFO
-	active []*oscWithADSRAndLFO
-	out    []float64 // length: samplesPerCycle
-}
-
-func newPolyOsc() *polyOsc {
-	pooled := make([]*oscWithADSRAndLFO, maxPoly)
-	for i := 0; i < len(pooled); i++ {
-		pooled[i] = &oscWithADSRAndLFO{
-			osc:  &osc{phase01: rand.Float64()},
-			adsr: &adsr{},
-			lfos: []*lfo{newLfo(), newLfo(), newLfo()},
-		}
-	}
-	return &polyOsc{
-		pooled: pooled,
-		out:    make([]float64, samplesPerCycle),
-	}
-}
-
-func (p *polyOsc) calc(
-	events [][]*midiEvent,
-	oscParams *oscParams,
-	adsrParams *adsrParams,
-	lfoParams []*lfoParams,
-) {
-	for _, o := range p.active {
-		for i, lfo := range o.lfos {
-			lfo.applyParams(lfoParams[i])
-		}
-	}
-	for _, o := range p.pooled {
-		for i, lfo := range o.lfos {
-			lfo.applyParams(lfoParams[i])
-		}
-	}
-	for i := int64(0); i < int64(len(p.out)); i++ {
-		p.out[i] = 0
-		events := events[i]
-		for j := 0; j < len(events); j++ {
-			switch data := events[j].event.(type) {
-			case *noteOn:
-				lenPooled := len(p.pooled)
-				if lenPooled > 0 {
-					o := p.pooled[lenPooled-1]
-					p.pooled = p.pooled[:lenPooled-1]
-					p.active = append(p.active, o)
-					o.note = data.note
-					o.osc.initWithNote(oscParams, data.note)
-					o.adsr.init(adsrParams)
-				} else {
-					log.Println("maxPoly exceeded")
-				}
-			}
-		}
-
-		for j := len(p.active) - 1; j >= 0; j-- {
-			o := p.active[j]
-			freqRatio := 1.0
-			phaseShift := 0.0
-			ampRatio := 1.0
-			for _, lfo := range o.lfos {
-				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc)
-				freqRatio *= _freqRatio
-				phaseShift += _phaseShift
-				ampRatio *= _ampRatio
-			}
-			for _, e := range events {
-				switch data := e.event.(type) {
-				case *noteOff:
-					if data.note == o.note {
-						o.adsr.noteOff()
-					}
-				case *noteOn:
-					if data.note == o.note {
-						o.adsr.noteOn()
-					}
-				}
-			}
-			o.adsr.step()
-			p.out[i] += o.osc.step(freqRatio, phaseShift) * 0.1 * ampRatio * o.adsr.value
-			if o.adsr.phase == "" {
-				p.active = append(p.active[:j], p.active[j+1:]...)
-				p.pooled = append(p.pooled, o)
-			}
-		}
-	}
-}
-
-// ----- POLY OSC V2 ----- //
-
-type polyOsc2 struct {
 	oscs []*oscWithADSRAndLFO
 	out  []float64 // length: samplesPerCycle
 }
 
-func newPolyOsc2() *polyOsc2 {
+func newPolyOsc() *polyOsc {
 	oscs := make([]*oscWithADSRAndLFO, 128)
 	for i := 0; i < len(oscs); i++ {
 		oscs[i] = &oscWithADSRAndLFO{
@@ -268,13 +175,13 @@ func newPolyOsc2() *polyOsc2 {
 			lfos: []*lfo{newLfo(), newLfo(), newLfo()},
 		}
 	}
-	return &polyOsc2{
+	return &polyOsc{
 		oscs: oscs,
 		out:  make([]float64, samplesPerCycle),
 	}
 }
 
-func (p *polyOsc2) calc(
+func (p *polyOsc) calc(
 	events [][]*midiEvent,
 	oscParams *oscParams,
 	adsrParams *adsrParams,
@@ -977,7 +884,7 @@ type state struct {
 	polyMode   bool
 	glideTime  int // ms
 	monoOsc    *monoOsc
-	polyOsc    *polyOsc2
+	polyOsc    *polyOsc
 	filter     *filter
 	pos        int64
 	out        []float64 // length: fftSize
@@ -1040,7 +947,7 @@ func newState() *state {
 		polyMode:   false,
 		glideTime:  100,
 		monoOsc:    newMonoOsc(),
-		polyOsc:    newPolyOsc2(),
+		polyOsc:    newPolyOsc(),
 		filter:     &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 		pos:        0,
 		out:        make([]float64, fftSize),
