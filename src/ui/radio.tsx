@@ -42,7 +42,7 @@ const Option = (o: {
           height: "7px",
           borderRadius: "50%",
           border: "solid 2px #222",
-          backgroundColor: o.selected ? "#97f" : "#000",
+          backgroundColor: o.selected ? "rgb(153,119,255)" : "#000",
           marginRight: "2px",
         }}
       />

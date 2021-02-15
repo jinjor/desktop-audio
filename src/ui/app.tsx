@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useCallback, useReducer } from "react";
 import { Notes } from "./note";
 import { LabeledKnob } from "./knob";
 import { Radio } from "./radio";
+import { Select } from "./select";
 import * as d from "./decoder";
 
 const EditGroup = (o: { label: string; children: any }) => {
@@ -399,30 +400,26 @@ const LFOGroup = React.memo(
     );
     return (
       <EditGroup label={`LFO ${o.index + 1}`}>
-        <div style={{ display: "flex", gap: "12px" }}>
-          <div>
-            <Radio
-              list={list}
-              value={o.value.destination}
-              onChange={onChangeDestination}
-            />
-          </div>
-          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <LFOWave value={o.value.wave} onChange={onChangeWave} />
-            <LFOFreq
-              min={destination.minFreq}
-              max={destination.maxFreq}
-              value={o.value.freq}
-              onChange={onChangeFreq}
-            />
-            <LFOAmount
-              min={destination.minAmount}
-              max={destination.maxAmount}
-              value={o.value.amount}
-              from={destination.fromAmount}
-              onChange={onChangeAmount}
-            />
-          </div>
+        <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+          <Select
+            list={list}
+            value={o.value.destination}
+            onChange={onChangeDestination}
+          />
+          <LFOWave value={o.value.wave} onChange={onChangeWave} />
+          <LFOFreq
+            min={destination.minFreq}
+            max={destination.maxFreq}
+            value={o.value.freq}
+            onChange={onChangeFreq}
+          />
+          <LFOAmount
+            min={destination.minAmount}
+            max={destination.maxAmount}
+            value={o.value.amount}
+            from={destination.fromAmount}
+            onChange={onChangeAmount}
+          />
         </div>
       </EditGroup>
     );
@@ -540,23 +537,19 @@ const EnvelopeGroup = React.memo(
     );
     return (
       <EditGroup label={`Envelope ${o.index + 1}`}>
-        <div style={{ display: "flex", gap: "12px" }}>
-          <div>
-            <Radio
-              list={list}
-              value={o.value.destination}
-              onChange={onChangeDestination}
-            />
-          </div>
-          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <EnvelopeDelay
-              min={destination.minDelay}
-              max={destination.maxDelay}
-              value={o.value.delay}
-              onChange={onChangeDelay}
-            />
-            <EnvelopeAttack value={o.value.attack} onChange={onChangeAttack} />
-          </div>
+        <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+          <Select
+            list={list}
+            value={o.value.destination}
+            onChange={onChangeDestination}
+          />
+          <EnvelopeDelay
+            min={destination.minDelay}
+            max={destination.maxDelay}
+            value={o.value.delay}
+            onChange={onChangeDelay}
+          />
+          <EnvelopeAttack value={o.value.attack} onChange={onChangeAttack} />
         </div>
       </EditGroup>
     );

@@ -103,7 +103,7 @@ const KnobView = (o: { size: number; value: number; from: number }) => {
   const valueY = slitR * Math.sin(valueRad);
   const pointX = pointD * Math.cos(valueRad);
   const pointY = pointD * Math.sin(valueRad);
-  const slitColor = "#97f";
+  const slitColor = "rgb(153,119,255)";
   const largeArc = Math.abs(valueRad - fromRad) >= Math.PI ? 1 : 0;
   const sweep = fromRad < valueRad ? 1 : 0;
   if (slitR * 2 + slitWidth > size) {
