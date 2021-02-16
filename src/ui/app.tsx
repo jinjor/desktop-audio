@@ -499,6 +499,16 @@ envelopeDestinations.set("none", {
   maxDelay: 0,
   defaultDelay: 0,
 });
+envelopeDestinations.set("freq", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
+envelopeDestinations.set("filter_freq", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
 for (let i = 0; i < 3; i++) {
   envelopeDestinations.set(`lfo${i}_amount`, {
     minDelay: 0,
@@ -506,15 +516,24 @@ for (let i = 0; i < 3; i++) {
     defaultDelay: 200,
   });
 }
+for (let i = 0; i < 3; i++) {
+  envelopeDestinations.set(`lfo${i}_freq`, {
+    minDelay: 0,
+    maxDelay: 0,
+    defaultDelay: 0,
+  });
+}
 type Envelope = {
   destination: string;
   delay: number;
   attack: number;
+  amount: number;
 };
-const defaultEnvelope = {
+const defaultEnvelope: Envelope = {
   destination: "none",
   delay: 0,
   attack: 0,
+  amount: 0,
 };
 const EnvelopeGroup = React.memo(
   (o: { index: number; value: Envelope; dispatch: React.Dispatch<Action> }) => {
@@ -535,6 +554,11 @@ const EnvelopeGroup = React.memo(
       (index: number, value: number) =>
         o.dispatch({ type: "changedEnvelopeAttack", index, value })
     );
+    const onChangeAmount = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedEnvelopeAmount", index, value })
+    );
     return (
       <EditGroup label={`Envelope ${o.index + 1}`}>
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
@@ -550,6 +574,7 @@ const EnvelopeGroup = React.memo(
             onChange={onChangeDelay}
           />
           <EnvelopeAttack value={o.value.attack} onChange={onChangeAttack} />
+          <EnvelopeAmount value={o.value.amount} onChange={onChangeAmount} />
         </div>
       </EditGroup>
     );
@@ -586,6 +611,21 @@ const EnvelopeAttack = React.memo(
         value={o.value}
         onChange={o.onChange}
         label="Attack"
+      />
+    );
+  }
+);
+const EnvelopeAmount = React.memo(
+  (o: { value: number; onChange: (value: number) => void }) => {
+    return (
+      <LabeledKnob
+        min={-1}
+        max={1}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        onChange={o.onChange}
+        label="Amount"
       />
     );
   }
@@ -718,6 +758,7 @@ const stateDecoder = d.object({
       destination: d.string(),
       delay: d.number(),
       attack: d.number(),
+      amount: d.number(),
     })
   ),
   filter: d.object({
@@ -747,6 +788,7 @@ type Action =
   | { type: "changedEnvelopeDestination"; index: number; value: string }
   | { type: "changedEnvelopeDelay"; index: number; value: number }
   | { type: "changedEnvelopeAttack"; index: number; value: number }
+  | { type: "changedEnvelopeAmount"; index: number; value: number }
   | { type: "changedFilterKind"; value: string }
   | { type: "changedFilterFreq"; value: number }
   | { type: "changedFilterQ"; value: number }
@@ -947,6 +989,22 @@ const App = () => {
           ...state,
           envelopes: setItem(state.envelopes, index, {
             attack: value,
+          }),
+        };
+      }
+      case "changedEnvelopeAmount": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "envelope",
+          String(index),
+          "amount",
+          value,
+        ]);
+        return {
+          ...state,
+          envelopes: setItem(state.envelopes, index, {
+            amount: value,
           }),
         };
       }

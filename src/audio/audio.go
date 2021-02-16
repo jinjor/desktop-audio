@@ -168,15 +168,24 @@ func (m *monoOsc) calc(
 		ampRatio := 1.0
 		for lfoIndex, lfo := range m.lfos {
 			amountGain := 1.0
+			lfoFreqRatio := 1.0
 			for _, envelope := range m.envelopes {
 				if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
 					amountGain *= envelope.value
 				}
+				if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
+					lfoFreqRatio *= math.Pow(16.0, envelope.value)
+				}
 			}
-			_freqRatio, _phaseShift, _ampRatio := lfo.step(m.osc, amountGain)
+			_freqRatio, _phaseShift, _ampRatio := lfo.step(m.osc, amountGain, lfoFreqRatio)
 			freqRatio *= _freqRatio
 			phaseShift += _phaseShift
 			ampRatio *= _ampRatio
+		}
+		for _, envelope := range m.envelopes {
+			if envelope.destination == "freq" {
+				freqRatio *= math.Pow(16.0, envelope.value)
+			}
 		}
 		m.out[i] = m.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * m.adsr.value
 	}
@@ -281,15 +290,24 @@ func (p *polyOsc) calc(
 			ampRatio := 1.0
 			for lfoIndex, lfo := range o.lfos {
 				amountGain := 1.0
+				lfoFreqRatio := 1.0
 				for _, envelope := range o.envelopes {
 					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
 						amountGain *= envelope.value
 					}
+					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
+						lfoFreqRatio *= math.Pow(16.0, envelope.value)
+					}
 				}
-				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain)
+				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
 				freqRatio *= _freqRatio
 				phaseShift += _phaseShift
 				ampRatio *= _ampRatio
+			}
+			for _, envelope := range o.envelopes {
+				if envelope.destination == "freq" {
+					freqRatio *= math.Pow(16.0, envelope.value)
+				}
 			}
 			p.out[i] += o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 			if o.adsr.phase == "" {
@@ -366,6 +384,7 @@ func (p *polyOsc2) calc(
 			if o.adsr.phase == "" {
 				continue
 			}
+			o.adsr.step()
 			for _, envelope := range o.envelopes {
 				envelope.step()
 			}
@@ -374,17 +393,25 @@ func (p *polyOsc2) calc(
 			ampRatio := 1.0
 			for lfoIndex, lfo := range o.lfos {
 				amountGain := 1.0
+				lfoFreqRatio := 1.0
 				for _, envelope := range o.envelopes {
 					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
 						amountGain *= envelope.value
 					}
+					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
+						lfoFreqRatio *= math.Pow(16.0, envelope.value)
+					}
 				}
-				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain)
+				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
 				freqRatio *= _freqRatio
 				phaseShift += _phaseShift
 				ampRatio *= _ampRatio
 			}
-			o.adsr.step()
+			for _, envelope := range o.envelopes {
+				if envelope.destination == "freq" {
+					freqRatio *= math.Pow(16.0, envelope.value)
+				}
+			}
 			p.out[i] += o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 		}
 	}
@@ -666,10 +693,18 @@ func (a *adsr) setParams(p *adsrParams) {
 func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 	a.base = 1
 	a.peek = 0
+	if p.destination == "freq" ||
+		p.destination == "filter_freq" ||
+		p.destination == "lfo0_freq" ||
+		p.destination == "lfo1_freq" ||
+		p.destination == "lfo2_freq" {
+		a.base = 0
+		a.peek = p.amount
+	}
 	a.attack = 0
 	a.keep = p.delay
 	a.decay = p.attack
-	a.sustain = 1
+	a.sustain = a.base
 	a.release = 0
 }
 
@@ -915,12 +950,14 @@ type envelopeParams struct {
 	destination string
 	delay       float64
 	attack      float64
+	amount      float64
 }
 
 type envelopeJSON struct {
 	Destination string  `json:"destination"`
 	Delay       float64 `json:"delay"`
 	Attack      float64 `json:"attack"`
+	Amount      float64 `json:"amount"`
 }
 
 func (l *envelopeParams) applyJSON(data json.RawMessage) {
@@ -933,12 +970,14 @@ func (l *envelopeParams) applyJSON(data json.RawMessage) {
 	l.destination = j.Destination
 	l.delay = j.Delay
 	l.attack = j.Attack
+	l.amount = j.Amount
 }
 func (l *envelopeParams) toJSON() json.RawMessage {
 	return toRawMessage(&envelopeJSON{
 		Destination: l.destination,
 		Delay:       l.delay,
 		Attack:      l.attack,
+		Amount:      l.amount,
 	})
 }
 func newEnvelopeParams() *envelopeParams {
@@ -946,6 +985,7 @@ func newEnvelopeParams() *envelopeParams {
 		destination: "none",
 		delay:       0,
 		attack:      0,
+		amount:      0,
 	}
 }
 func (l *envelopeParams) set(key string, value string) error {
@@ -964,6 +1004,12 @@ func (l *envelopeParams) set(key string, value string) error {
 			return err
 		}
 		l.attack = value
+	case "amount":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.amount = value
 	}
 	return nil
 }
@@ -1092,26 +1138,26 @@ func (l *lfo) applyParams(p *lfoParams) {
 	l.amount = p.amount
 }
 
-func (l *lfo) step(career *osc, amountGain float64) (float64, float64, float64) {
+func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float64, float64, float64) {
 	freqRatio := 1.0
 	phaseShift := 0.0
 	ampRatio := 1.0
 	switch l.destination {
 	case "vibrato":
 		amount := l.amount * amountGain
-		freqRatio = math.Pow(2.0, l.osc.step(1.0, 0.0)*amount/100.0/12.0)
+		freqRatio = math.Pow(2.0, l.osc.step(lfoFreqRatio, 0.0)*amount/100.0/12.0)
 	case "tremolo":
 		amount := l.amount * amountGain
-		ampRatio = 1.0 + (l.osc.step(1.0, 0.0)-1.0)/2.0*amount
+		ampRatio = 1.0 + (l.osc.step(lfoFreqRatio, 0.0)-1.0)/2.0*amount
 	case "fm":
 		amount := l.amount * amountGain
-		freqRatio = math.Pow(2.0, l.osc.step(career.freq, 0.0)*amount/100/12)
+		freqRatio = math.Pow(2.0, l.osc.step(career.freq*lfoFreqRatio, 0.0)*amount/100/12)
 	case "pm":
 		amount := l.amount * amountGain
-		phaseShift = l.osc.step(career.freq, 0.0) * amount
+		phaseShift = l.osc.step(career.freq*lfoFreqRatio, 0.0) * amount
 	case "am":
 		amount := l.amount * amountGain
-		ampRatio = 1.0 + l.osc.step(career.freq, 0.0)*amount
+		ampRatio = 1.0 + l.osc.step(career.freq*lfoFreqRatio, 0.0)*amount
 	}
 	return freqRatio, phaseShift, ampRatio
 }
