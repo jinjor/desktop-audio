@@ -12,9 +12,8 @@ export const Select = (o: {
     window.addEventListener("click", callback);
     return () => window.removeEventListener("click", callback);
   }, []);
-  const onClickTrigger = (e: MouseEvent) => {
-    e.stopPropagation();
-    setOpen(!open);
+  const onClickTrigger = () => {
+    setTimeout(() => setOpen(!open));
   };
   const onClickOption = (value: string) => {
     setOpen(false);
