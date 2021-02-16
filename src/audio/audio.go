@@ -134,6 +134,9 @@ func (m *monoOsc) calc(
 						m.osc.glide(oscParams, m.activeNotes[0], glideTime)
 					}
 					m.adsr.noteOn()
+					for _, envelope := range m.envelopes {
+						envelope.noteOn()
+					}
 				}
 			case *noteOff:
 				removed := 0
@@ -150,6 +153,9 @@ func (m *monoOsc) calc(
 				} else {
 					m.adsr.noteOff()
 				}
+				for _, envelope := range m.envelopes {
+					envelope.noteOff()
+				}
 			}
 		}
 		for _, envelope := range m.envelopes {
@@ -159,8 +165,14 @@ func (m *monoOsc) calc(
 		freqRatio := 1.0
 		phaseShift := 0.0
 		ampRatio := 1.0
-		for _, lfo := range m.lfos {
-			_freqRatio, _phaseShift, _ampRatio := lfo.step(m.osc)
+		for lfoIndex, lfo := range m.lfos {
+			amountGain := 1.0
+			for envelopeIndex, envelopeParam := range envelopeParams {
+				if envelopeParam.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
+					amountGain *= m.envelopes[envelopeIndex].value
+				}
+			}
+			_freqRatio, _phaseShift, _ampRatio := lfo.step(m.osc, amountGain)
 			freqRatio *= _freqRatio
 			phaseShift += _phaseShift
 			ampRatio *= _ampRatio
@@ -239,31 +251,43 @@ func (p *polyOsc) calc(
 
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
+			for _, e := range events {
+				switch data := e.event.(type) {
+				case *noteOff:
+					if data.note == o.note {
+						o.adsr.noteOff()
+						for _, envelope := range o.envelopes {
+							envelope.noteOff()
+						}
+					}
+				case *noteOn:
+					if data.note == o.note {
+						o.adsr.noteOn()
+						for _, envelope := range o.envelopes {
+							envelope.noteOn()
+						}
+					}
+				}
+			}
+			o.adsr.step()
 			for _, envelope := range o.envelopes {
 				envelope.step()
 			}
 			freqRatio := 1.0
 			phaseShift := 0.0
 			ampRatio := 1.0
-			for _, lfo := range o.lfos {
-				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc)
+			for lfoIndex, lfo := range o.lfos {
+				amountGain := 1.0
+				for envelopeIndex, envelopeParam := range envelopeParams {
+					if envelopeParam.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
+						amountGain *= o.envelopes[envelopeIndex].value
+					}
+				}
+				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain)
 				freqRatio *= _freqRatio
 				phaseShift += _phaseShift
 				ampRatio *= _ampRatio
 			}
-			for _, e := range events {
-				switch data := e.event.(type) {
-				case *noteOff:
-					if data.note == o.note {
-						o.adsr.noteOff()
-					}
-				case *noteOn:
-					if data.note == o.note {
-						o.adsr.noteOn()
-					}
-				}
-			}
-			o.adsr.step()
 			p.out[i] += o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 			if o.adsr.phase == "" {
 				p.active = append(p.active[:j], p.active[j+1:]...)
@@ -322,9 +346,15 @@ func (p *polyOsc2) calc(
 				o.osc.initWithNoteWithoutRandomizePhase(oscParams, data.note)
 				o.adsr.setParams(adsrParams)
 				o.adsr.noteOn()
+				for _, envelope := range o.envelopes {
+					envelope.noteOn()
+				}
 			case *noteOff:
 				o := p.oscs[data.note]
 				o.adsr.noteOff()
+				for _, envelope := range o.envelopes {
+					envelope.noteOff()
+				}
 			}
 		}
 		for j := len(p.oscs) - 1; j >= 0; j-- {
@@ -338,8 +368,14 @@ func (p *polyOsc2) calc(
 			freqRatio := 1.0
 			phaseShift := 0.0
 			ampRatio := 1.0
-			for _, lfo := range o.lfos {
-				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc)
+			for lfoIndex, lfo := range o.lfos {
+				amountGain := 1.0
+				for envelopeIndex, envelopeParam := range envelopeParams {
+					if envelopeParam.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
+						amountGain *= o.envelopes[envelopeIndex].value
+					}
+				}
+				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain)
 				freqRatio *= _freqRatio
 				phaseShift += _phaseShift
 				ampRatio *= _ampRatio
@@ -582,11 +618,14 @@ func (a *adsrParams) set(key string, value string) error {
 
 type adsr struct {
 	attack         float64 // ms
+	keep           float64 // ms
 	decay          float64 // ms
 	sustain        float64 // 0-1
 	release        float64 // ms
+	base           float64 // 0-1
+	peek           float64 // 0-1
 	value          float64
-	phase          string // "attack", "decay", "sustain", "release" nil
+	phase          string // "attack", "keep", "decay", "sustain", "release" nil
 	phasePos       int
 	valueAtNoteOn  float64
 	valueAtNoteOff float64
@@ -602,28 +641,22 @@ func (a *adsr) init(p *adsrParams) {
 }
 
 func (a *adsr) setParams(p *adsrParams) {
+	a.base = 0
+	a.peek = 1
 	a.attack = p.attack
+	a.keep = 0
 	a.decay = p.decay
 	a.sustain = p.sustain
 	a.release = p.release
 }
 func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
-	// TODO
-}
-
-func (a *adsr) calc(pos int64, events [][]*midiEvent, out []float64) {
-	for i := range out {
-		for _, e := range events[i] {
-			switch e.event.(type) {
-			case *noteOff:
-				a.noteOff()
-			case *noteOn:
-				a.noteOn()
-			}
-		}
-		a.step()
-		out[i] *= a.value
-	}
+	a.base = 1
+	a.peek = 0
+	a.attack = 0
+	a.keep = p.delay
+	a.decay = p.attack
+	a.sustain = 1
+	a.release = 0
 }
 
 func (a *adsr) noteOn() {
@@ -642,19 +675,34 @@ func (a *adsr) step() {
 	phaseTime := float64(a.phasePos) * secPerSample * 1000 // ms
 	switch a.phase {
 	case "attack":
-		t := phaseTime / float64(a.attack)
-		a.value = t*1 + (1-t)*a.valueAtNoteOn // TODO: don't use the same attack time
-		if t >= 1 {
+		if phaseTime >= float64(a.attack) {
+			a.phase = "keep"
+			a.phasePos = 0
+			a.value = a.peek
+		} else {
+			t := phaseTime / float64(a.attack)
+			a.value = t*a.peek + (1-t)*a.valueAtNoteOn // TODO: don't use the same attack time
+			a.phasePos++
+		}
+	case "keep":
+		if phaseTime >= float64(a.keep) {
 			a.phase = "decay"
 			a.phasePos = 0
-			a.value = 1
 		} else {
 			a.phasePos++
 		}
 	case "decay":
-		t := phaseTime / float64(a.decay)
-		a.value = setTargetAtTime(1.0, a.sustain, t)
-		if a.value-a.sustain < 0.001 {
+		ended := false
+		if a.decay == 0 {
+			ended = true
+		} else {
+			t := phaseTime / float64(a.decay)
+			a.value = setTargetAtTime(a.peek, a.sustain, t)
+			if math.Abs(a.value-a.sustain) < 0.001 {
+				ended = true
+			}
+		}
+		if ended {
 			a.phase = "sustain"
 			a.phasePos = 0
 			a.value = float64(a.sustain)
@@ -664,17 +712,25 @@ func (a *adsr) step() {
 	case "sustain":
 		a.value = float64(a.sustain)
 	case "release":
-		t := phaseTime / float64(a.release)
-		a.value = setTargetAtTime(a.valueAtNoteOff, 0.0, t)
-		if a.value < 0.001 {
+		ended := false
+		if a.release == 0 {
+			ended = true
+		} else {
+			t := phaseTime / float64(a.release)
+			a.value = setTargetAtTime(a.valueAtNoteOff, a.base, t)
+			if math.Abs(a.value-a.base) < 0.001 {
+				ended = true
+			}
+		}
+		if ended {
 			a.phase = ""
 			a.phasePos = 0
-			a.value = 0
+			a.value = a.base
 		} else {
 			a.phasePos++
 		}
 	default:
-		a.value = 0
+		a.value = a.base
 	}
 }
 
@@ -1010,21 +1066,26 @@ func (l *lfo) applyParams(p *lfoParams) {
 	l.amount = p.amount
 }
 
-func (l *lfo) step(career *osc) (float64, float64, float64) {
+func (l *lfo) step(career *osc, amountGain float64) (float64, float64, float64) {
 	freqRatio := 1.0
 	phaseShift := 0.0
 	ampRatio := 1.0
 	switch l.destination {
 	case "vibrato":
-		freqRatio = math.Pow(2.0, l.osc.step(1.0, 0.0)*l.amount/100/12)
+		amount := l.amount * amountGain
+		freqRatio = math.Pow(2.0, l.osc.step(1.0, 0.0)*amount/100.0/12.0)
 	case "tremolo":
-		ampRatio = 1 - l.amount/2 + l.osc.step(1.0, 0.0)*l.amount/2
+		amount := l.amount * amountGain
+		ampRatio = 1.0 + (l.osc.step(1.0, 0.0)-1.0)/2.0*amount
 	case "fm":
-		freqRatio = math.Pow(2.0, l.osc.step(career.freq, 0.0)*l.amount/100/12)
+		amount := l.amount * amountGain
+		freqRatio = math.Pow(2.0, l.osc.step(career.freq, 0.0)*amount/100/12)
 	case "pm":
-		phaseShift = l.osc.step(career.freq, 0.0) * l.amount
+		amount := l.amount * amountGain
+		phaseShift = l.osc.step(career.freq, 0.0) * amount
 	case "am":
-		ampRatio = 1 + l.osc.step(career.freq, 0.0)*l.amount
+		amount := l.amount * amountGain
+		ampRatio = 1.0 + l.osc.step(career.freq, 0.0)*amount
 	}
 	return freqRatio, phaseShift, ampRatio
 }
