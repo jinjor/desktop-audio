@@ -620,6 +620,16 @@ func (a *adsrParams) set(key string, value string) error {
 	return nil
 }
 
+/*
+  p +     x---x
+    |    /     \
+    |   /       \
+  s +  /         x------x
+    | /                  \
+    |/                    \
+  b +-----+---+--+------+---
+    |a    |k  |d |      |r |
+*/
 type adsr struct {
 	attack         float64 // ms
 	keep           float64 // ms
