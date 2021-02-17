@@ -6,6 +6,31 @@ import { LabeledKnob } from "./knob";
 import { Radio } from "./radio";
 import { Select } from "./select";
 import * as d from "./decoder";
+import * as waveform from "./waveform";
+
+const waveNameToIcon = (value: string) => {
+  const size = 16;
+  switch (value) {
+    case "sine":
+      return waveform.sine(size);
+    case "triangle":
+      return waveform.triangle(size);
+    case "square":
+    case "square-wt":
+      return waveform.square(size);
+    case "pulse":
+      return waveform.pulse(size);
+    case "saw":
+    case "saw-wt":
+      return waveform.saw(size);
+    case "saw-rev":
+      return waveform.sawRev(size);
+    case "noise":
+      return waveform.noise(size);
+    default:
+      return value;
+  }
+};
 
 const EditGroup = (o: { label: string; children: any }) => {
   return (
@@ -54,6 +79,7 @@ const GlideTime = React.memo(
     );
   }
 );
+
 const OscKind = React.memo(
   (o: { dispatch: React.Dispatch<Action>; value: string }) => {
     const onChange = (value: string) =>
@@ -63,14 +89,16 @@ const OscKind = React.memo(
         list={[
           "sine",
           "triangle",
-          "square",
+          // "square",
           "square-wt",
           "pulse",
-          "saw",
+          // "saw",
           "saw-wt",
           "noise",
         ]}
         value={o.value}
+        columns={2}
+        toElement={waveNameToIcon}
         onChange={onChange}
       />
     );
@@ -432,14 +460,16 @@ const LFOWave = React.memo(
         list={[
           "sine",
           "triangle",
-          "square",
+          // "square",
           "square-wt",
           "pulse",
-          "saw",
+          // "saw",
           "saw-wt",
           "saw-rev",
         ]}
         value={o.value}
+        columns={2}
+        toElement={waveNameToIcon}
         onChange={o.onChange}
       />
     );
@@ -1061,15 +1091,11 @@ const App = () => {
           </div>
         </EditGroup>
         <EditGroup label="OSC">
-          <div style={{ display: "flex", gap: "12px" }}>
-            <div>
-              <OscKind value={state.osc.kind} dispatch={dispatch} />
-            </div>
-            <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-              <Octave value={state.osc.octave} dispatch={dispatch} />
-              <Coarse value={state.osc.coarse} dispatch={dispatch} />
-              <Fine value={state.osc.fine} dispatch={dispatch} />
-            </div>
+          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+            <OscKind value={state.osc.kind} dispatch={dispatch} />
+            <Octave value={state.osc.octave} dispatch={dispatch} />
+            <Coarse value={state.osc.coarse} dispatch={dispatch} />
+            <Fine value={state.osc.fine} dispatch={dispatch} />
           </div>
         </EditGroup>
         <EditGroup label="Envelope">
