@@ -23,7 +23,7 @@ export const Select = (o: {
   };
   const size = 15;
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", width: "72px" }}>
       <div
         style={{
           left: 0,
@@ -31,27 +31,31 @@ export const Select = (o: {
           backgroundColor: "#444",
           border: "solid 1px #222",
           borderBottom: "solid 1px #333",
-          padding: "1px 4px",
-          whiteSpace: "nowrap",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
         onClick={onClickTrigger}
       >
-        <span>{o.value}</span>
+        <span
+          style={{
+            padding: "1px 4px",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          }}
+        >
+          {o.value}
+        </span>
         <svg
           style={{
-            position: "absolute",
+            marginLeft: "auto",
             right: "1px",
             width: `${size}px`,
             height: `${size}px`,
           }}
           viewBox={`-10 -10 20 20`}
         >
-          <path
-            // stroke="#eee"
-            // strokeWidth={1}
-            fill="#eee"
-            d={`M -4 -2 h 8 l -4 4 Z`}
-          />
+          <path fill="#eee" d={`M -4 -2 h 8 l -4 4 Z`} />
         </svg>
       </div>
       <div

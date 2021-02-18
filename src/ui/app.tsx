@@ -6,31 +6,7 @@ import { LabeledKnob } from "./knob";
 import { Radio } from "./radio";
 import { Select } from "./select";
 import * as d from "./decoder";
-import * as waveform from "./waveform";
-
-const waveNameToIcon = (value: string) => {
-  const size = 16;
-  switch (value) {
-    case "sine":
-      return waveform.sine(size);
-    case "triangle":
-      return waveform.triangle(size);
-    case "square":
-    case "square-wt":
-      return waveform.square(size);
-    case "pulse":
-      return waveform.pulse(size);
-    case "saw":
-    case "saw-wt":
-      return waveform.saw(size);
-    case "saw-rev":
-      return waveform.sawRev(size);
-    case "noise":
-      return waveform.noise(size);
-    default:
-      return value;
-  }
-};
+import { WaveSelect } from "./wave-select";
 
 const EditGroup = (o: { label: string; children: any }) => {
   return (
@@ -40,6 +16,7 @@ const EditGroup = (o: { label: string; children: any }) => {
           display: "block",
           borderBottom: "solid 1px #aaa",
           textAlign: "center",
+          whiteSpace: "nowrap",
         }}
       >
         {o.label}
@@ -85,7 +62,7 @@ const OscKind = React.memo(
     const onChange = (value: string) =>
       o.dispatch({ type: "changedOscKind", value });
     return (
-      <Radio
+      <WaveSelect
         list={[
           "sine",
           "triangle",
@@ -97,8 +74,7 @@ const OscKind = React.memo(
           "noise",
         ]}
         value={o.value}
-        columns={2}
-        toElement={waveNameToIcon}
+        columns={3}
         onChange={onChange}
       />
     );
@@ -434,7 +410,9 @@ const LFOGroup = React.memo(
             value={o.value.destination}
             onChange={onChangeDestination}
           />
-          <LFOWave value={o.value.wave} onChange={onChangeWave} />
+          <div style={{ textAlign: "center" }}>
+            <LFOWave value={o.value.wave} onChange={onChangeWave} />
+          </div>
           <LFOFreq
             min={destination.minFreq}
             max={destination.maxFreq}
@@ -456,7 +434,7 @@ const LFOGroup = React.memo(
 const LFOWave = React.memo(
   (o: { value: string; onChange: (value: string) => void }) => {
     return (
-      <Radio
+      <WaveSelect
         list={[
           "sine",
           "triangle",
@@ -468,8 +446,7 @@ const LFOWave = React.memo(
           "saw-rev",
         ]}
         value={o.value}
-        columns={2}
-        toElement={waveNameToIcon}
+        columns={3}
         onChange={o.onChange}
       />
     );
@@ -1092,7 +1069,9 @@ const App = () => {
         </EditGroup>
         <EditGroup label="OSC">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <OscKind value={state.osc.kind} dispatch={dispatch} />
+            <div style={{ textAlign: "center" }}>
+              <OscKind value={state.osc.kind} dispatch={dispatch} />
+            </div>
             <Octave value={state.osc.octave} dispatch={dispatch} />
             <Coarse value={state.osc.coarse} dispatch={dispatch} />
             <Fine value={state.osc.fine} dispatch={dispatch} />

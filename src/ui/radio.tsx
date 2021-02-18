@@ -9,7 +9,6 @@ export const Radio = (o: {
 }) => {
   const columns = o.columns || 1;
   return (
-    // <div style={{ display: "flex", flexFlow: "column", userSelect: "none" }}>
     <div
       style={{
         display: "grid",
@@ -56,7 +55,7 @@ const Option = (o: {
           marginRight: "2px",
         }}
       />
-      <div>{o.label}</div>
+      <div style={{ whiteSpace: "nowrap" }}>{o.label}</div>
     </div>
   );
 };
