@@ -131,10 +131,10 @@ func (m *monoOsc) calc(
 					m.activeNotes[0] = data.note
 					if len(m.activeNotes) == 1 {
 						m.o.osc.initWithNote(oscParams, data.note)
+						event = enumNoteOn
 					} else {
 						m.o.osc.glide(oscParams, m.activeNotes[0], glideTime)
 					}
-					event = enumNoteOn
 				}
 			case *noteOff:
 				removed := 0
