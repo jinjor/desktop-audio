@@ -84,20 +84,19 @@ type noteOff struct {
 // ----- MONO OSC ----- //
 
 type monoOsc struct {
-	osc         *osc
-	adsr        *adsr
-	lfos        []*lfo
-	envelopes   []*envelope
+	o           *decoratedOsc
 	activeNotes []int
 	out         []float64 // length: samplesPerCycle
 }
 
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
-		osc:         &osc{phase01: rand.Float64()},
-		adsr:        &adsr{},
-		lfos:        []*lfo{newLfo(), newLfo(), newLfo()},
-		envelopes:   []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+		o: &decoratedOsc{
+			osc:       &osc{phase01: rand.Float64()},
+			adsr:      &adsr{},
+			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
+			envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+		},
 		activeNotes: make([]int, 0, 128),
 		out:         make([]float64, samplesPerCycle),
 	}
@@ -111,15 +110,16 @@ func (m *monoOsc) calc(
 	envelopeParams []*envelopeParams,
 	glideTime int,
 ) {
-	for i, lfo := range m.lfos {
+	for i, lfo := range m.o.lfos {
 		lfo.applyParams(lfoParams[i])
 	}
-	for i, envelope := range m.envelopes {
+	for i, envelope := range m.o.envelopes {
 		envelope.destination = envelopeParams[i].destination
 		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
 	}
-	m.adsr.setParams(adsrParams)
+	m.o.adsr.setParams(adsrParams)
 	for i := int64(0); i < int64(len(m.out)); i++ {
+		event := enumNoEvent
 		for _, e := range events[i] {
 			switch data := e.event.(type) {
 			case *noteOn:
@@ -130,14 +130,11 @@ func (m *monoOsc) calc(
 					}
 					m.activeNotes[0] = data.note
 					if len(m.activeNotes) == 1 {
-						m.osc.initWithNote(oscParams, data.note)
+						m.o.osc.initWithNote(oscParams, data.note)
 					} else {
-						m.osc.glide(oscParams, m.activeNotes[0], glideTime)
+						m.o.osc.glide(oscParams, m.activeNotes[0], glideTime)
 					}
-					m.adsr.noteOn()
-					for _, envelope := range m.envelopes {
-						envelope.noteOn()
-					}
+					event = enumNoteOn
 				}
 			case *noteOff:
 				removed := 0
@@ -150,44 +147,13 @@ func (m *monoOsc) calc(
 				}
 				m.activeNotes = m.activeNotes[:len(m.activeNotes)-removed]
 				if len(m.activeNotes) > 0 {
-					m.osc.glide(oscParams, m.activeNotes[0], glideTime)
+					m.o.osc.glide(oscParams, m.activeNotes[0], glideTime)
 				} else {
-					m.adsr.noteOff()
-				}
-				for _, envelope := range m.envelopes {
-					envelope.noteOff()
+					event = enumNoteOff
 				}
 			}
 		}
-		for _, envelope := range m.envelopes {
-			envelope.step()
-		}
-		m.adsr.step()
-		freqRatio := 1.0
-		phaseShift := 0.0
-		ampRatio := 1.0
-		for lfoIndex, lfo := range m.lfos {
-			amountGain := 1.0
-			lfoFreqRatio := 1.0
-			for _, envelope := range m.envelopes {
-				if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
-					amountGain *= envelope.value
-				}
-				if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
-					lfoFreqRatio *= math.Pow(16.0, envelope.value)
-				}
-			}
-			_freqRatio, _phaseShift, _ampRatio := lfo.step(m.osc, amountGain, lfoFreqRatio)
-			freqRatio *= _freqRatio
-			phaseShift += _phaseShift
-			ampRatio *= _ampRatio
-		}
-		for _, envelope := range m.envelopes {
-			if envelope.destination == "freq" {
-				freqRatio *= math.Pow(16.0, envelope.value)
-			}
-		}
-		m.out[i] = m.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * m.adsr.value
+		m.out[i] = m.o.step(event)
 	}
 }
 
@@ -200,14 +166,21 @@ type polyOsc struct {
 	out    []float64 // length: samplesPerCycle
 }
 
+type noteOsc struct {
+	*decoratedOsc
+	note int
+}
+
 func newPolyOsc() *polyOsc {
 	pooled := make([]*noteOsc, maxPoly)
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
-			osc:       &osc{phase01: rand.Float64()},
-			adsr:      &adsr{},
-			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
-			envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+			decoratedOsc: &decoratedOsc{
+				osc:       &osc{phase01: rand.Float64()},
+				adsr:      &adsr{},
+				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
+				envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+			},
 		}
 	}
 	return &polyOsc{
@@ -223,26 +196,7 @@ func (p *polyOsc) calc(
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
 ) {
-	for _, o := range p.active {
-		for i, lfo := range o.lfos {
-			lfo.applyParams(lfoParams[i])
-		}
-		for i, envelope := range o.envelopes {
-			envelope.destination = envelopeParams[i].destination
-			envelope.adsr.applyEnvelopeParams(envelopeParams[i])
-		}
-	}
-	for _, o := range p.pooled {
-		for i, lfo := range o.lfos {
-			lfo.applyParams(lfoParams[i])
-		}
-		for i, envelope := range o.envelopes {
-			envelope.destination = envelopeParams[i].destination
-			envelope.adsr.applyEnvelopeParams(envelopeParams[i])
-		}
-	}
 	for i := int64(0); i < int64(len(p.out)); i++ {
-		p.out[i] = 0
 		events := events[i]
 		for j := 0; j < len(events); j++ {
 			switch data := events[j].event.(type) {
@@ -260,56 +214,34 @@ func (p *polyOsc) calc(
 				}
 			}
 		}
-
-		for j := len(p.active) - 1; j >= 0; j-- {
-			o := p.active[j]
+		for _, o := range p.active {
+			for i, lfo := range o.lfos {
+				lfo.applyParams(lfoParams[i])
+			}
+			for i, envelope := range o.envelopes {
+				envelope.destination = envelopeParams[i].destination
+				envelope.adsr.applyEnvelopeParams(envelopeParams[i])
+			}
+		}
+		p.out[i] = 0.0
+		for _, o := range p.active {
+			event := enumNoEvent
 			for _, e := range events {
 				switch data := e.event.(type) {
 				case *noteOff:
 					if data.note == o.note {
-						o.adsr.noteOff()
-						for _, envelope := range o.envelopes {
-							envelope.noteOff()
-						}
+						event = enumNoteOff
 					}
 				case *noteOn:
 					if data.note == o.note {
-						o.adsr.noteOn()
-						for _, envelope := range o.envelopes {
-							envelope.noteOn()
-						}
+						event = enumNoteOn
 					}
 				}
 			}
-			o.adsr.step()
-			for _, envelope := range o.envelopes {
-				envelope.step()
-			}
-			freqRatio := 1.0
-			phaseShift := 0.0
-			ampRatio := 1.0
-			for lfoIndex, lfo := range o.lfos {
-				amountGain := 1.0
-				lfoFreqRatio := 1.0
-				for _, envelope := range o.envelopes {
-					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
-						amountGain *= envelope.value
-					}
-					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
-						lfoFreqRatio *= math.Pow(16.0, envelope.value)
-					}
-				}
-				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
-				freqRatio *= _freqRatio
-				phaseShift += _phaseShift
-				ampRatio *= _ampRatio
-			}
-			for _, envelope := range o.envelopes {
-				if envelope.destination == "freq" {
-					freqRatio *= math.Pow(16.0, envelope.value)
-				}
-			}
-			p.out[i] += o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+			p.out[i] += o.step(event)
+		}
+		for j := len(p.active) - 1; j >= 0; j-- {
+			o := p.active[j]
 			if o.adsr.phase == "" {
 				p.active = append(p.active[:j], p.active[j+1:]...)
 				p.pooled = append(p.pooled, o)
@@ -318,113 +250,62 @@ func (p *polyOsc) calc(
 	}
 }
 
-// ----- POLY OSC V2 ----- //
+// ----- DECORATED OSC ----- //
 
-type polyOsc2 struct {
-	oscs []*noteOsc
-	out  []float64 // length: samplesPerCycle
-}
-
-func newPolyOsc2() *polyOsc2 {
-	oscs := make([]*noteOsc, 128)
-	for i := 0; i < len(oscs); i++ {
-		oscs[i] = &noteOsc{
-			osc:       &osc{phase01: rand.Float64()},
-			adsr:      &adsr{},
-			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
-			envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
-		}
-	}
-	return &polyOsc2{
-		oscs: oscs,
-		out:  make([]float64, samplesPerCycle),
-	}
-}
-
-func (p *polyOsc2) calc(
-	events [][]*midiEvent,
-	oscParams *oscParams,
-	adsrParams *adsrParams,
-	lfoParams []*lfoParams,
-	envelopeParams []*envelopeParams,
-) {
-	for _, o := range p.oscs {
-		for i, lfo := range o.lfos {
-			lfo.applyParams(lfoParams[i])
-		}
-		for i, envelope := range o.envelopes {
-			envelope.destination = envelopeParams[i].destination
-			envelope.adsr.applyEnvelopeParams(envelopeParams[i])
-		}
-	}
-	for i := int64(0); i < int64(len(p.out)); i++ {
-		p.out[i] = 0
-		events := events[i]
-		for j := 0; j < len(events); j++ {
-			switch data := events[j].event.(type) {
-			case *noteOn:
-				o := p.oscs[data.note]
-				o.note = data.note
-				o.osc.initWithNoteWithoutRandomizePhase(oscParams, data.note)
-				o.adsr.setParams(adsrParams)
-				o.adsr.noteOn()
-				for _, envelope := range o.envelopes {
-					envelope.noteOn()
-				}
-			case *noteOff:
-				o := p.oscs[data.note]
-				o.adsr.noteOff()
-				for _, envelope := range o.envelopes {
-					envelope.noteOff()
-				}
-			}
-		}
-		for j := len(p.oscs) - 1; j >= 0; j-- {
-			o := p.oscs[j]
-			if o.adsr.phase == "" {
-				continue
-			}
-			o.adsr.step()
-			for _, envelope := range o.envelopes {
-				envelope.step()
-			}
-			freqRatio := 1.0
-			phaseShift := 0.0
-			ampRatio := 1.0
-			for lfoIndex, lfo := range o.lfos {
-				amountGain := 1.0
-				lfoFreqRatio := 1.0
-				for _, envelope := range o.envelopes {
-					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
-						amountGain *= envelope.value
-					}
-					if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
-						lfoFreqRatio *= math.Pow(16.0, envelope.value)
-					}
-				}
-				_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
-				freqRatio *= _freqRatio
-				phaseShift += _phaseShift
-				ampRatio *= _ampRatio
-			}
-			for _, envelope := range o.envelopes {
-				if envelope.destination == "freq" {
-					freqRatio *= math.Pow(16.0, envelope.value)
-				}
-			}
-			p.out[i] += o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
-		}
-	}
-}
-
-// ----- NOTE OSC ----- //
-
-type noteOsc struct {
-	note      int
+type decoratedOsc struct {
 	osc       *osc
 	adsr      *adsr
 	lfos      []*lfo
 	envelopes []*envelope
+}
+
+const enumNoEvent = 0
+const enumNoteOn = 1
+const enumNoteOff = 2
+
+func (o *decoratedOsc) step(event int) float64 {
+	switch event {
+	case enumNoEvent:
+	case enumNoteOn:
+		o.adsr.noteOn()
+		for _, envelope := range o.envelopes {
+			envelope.noteOn()
+		}
+	case enumNoteOff:
+		o.adsr.noteOff()
+		for _, envelope := range o.envelopes {
+			envelope.noteOff()
+		}
+	}
+	o.adsr.step()
+	for _, envelope := range o.envelopes {
+		envelope.step()
+	}
+	freqRatio := 1.0
+	phaseShift := 0.0
+	ampRatio := 1.0
+	for lfoIndex, lfo := range o.lfos {
+		amountGain := 1.0
+		lfoFreqRatio := 1.0
+		for _, envelope := range o.envelopes {
+			if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
+				amountGain *= envelope.value
+			}
+			if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
+				lfoFreqRatio *= math.Pow(16.0, envelope.value)
+			}
+		}
+		_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
+		freqRatio *= _freqRatio
+		phaseShift += _phaseShift
+		ampRatio *= _ampRatio
+	}
+	for _, envelope := range o.envelopes {
+		if envelope.destination == "freq" {
+			freqRatio *= math.Pow(16.0, envelope.value)
+		}
+	}
+	return o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 }
 
 // ----- OSC ----- //
@@ -514,10 +395,6 @@ func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
 	o.freq = noteWithParamsToFreq(p, note)
 	o.phase01 = rand.Float64()
-}
-func (o *osc) initWithNoteWithoutRandomizePhase(p *oscParams, note int) {
-	o.kind = p.kind
-	o.freq = noteWithParamsToFreq(p, note)
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	nextFreq := noteWithParamsToFreq(p, note)
