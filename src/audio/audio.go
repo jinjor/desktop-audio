@@ -790,15 +790,12 @@ func setTargetAtTime(initialValue float64, targetValue float64, pos float64) flo
 
 // ----- Filter ----- //
 
-type filter struct {
+type filterParams struct {
 	kind string
 	freq float64
 	q    float64
 	gain float64
 	N    int
-	a    []float64 // feedforward
-	b    []float64 // feedback
-	past []float64
 }
 type filterJSON struct {
 	Kind string  `json:"kind"`
@@ -807,7 +804,7 @@ type filterJSON struct {
 	Gain float64 `json:"gain"`
 }
 
-func (f *filter) applyJSON(data json.RawMessage) {
+func (f *filterParams) applyJSON(data json.RawMessage) {
 	var j filterJSON
 	err := json.Unmarshal(data, &j)
 	if err != nil {
@@ -819,7 +816,7 @@ func (f *filter) applyJSON(data json.RawMessage) {
 	f.q = j.Q
 	f.gain = j.Gain
 }
-func (f *filter) toJSON() json.RawMessage {
+func (f *filterParams) toJSON() json.RawMessage {
 	return toRawMessage(&filterJSON{
 		Kind: f.kind,
 		Freq: f.freq,
@@ -828,15 +825,16 @@ func (f *filter) toJSON() json.RawMessage {
 	})
 }
 
-func (f *filter) process(in []float64, out []float64) {
-	if len(f.a) == 0 {
-		f.a, f.b = getH(f)
-		f.past = make([]float64, int(math.Max(float64(len(f.a)-1), float64(len(f.b)))))
-	}
-	processFilter(in, out, f.a, f.b, f.past)
+type filter struct {
+	freq float64
+	q    float64
+	gain float64
+	a    []float64 // feedforward
+	b    []float64 // feedback
+	past []float64
 }
 
-func getH(f *filter) ([]float64, []float64) {
+func makeH(f *filterParams) ([]float64, []float64) {
 	fc := f.freq / sampleRate
 	switch f.kind {
 	case "lowpass-fir":
@@ -865,7 +863,15 @@ func getH(f *filter) ([]float64, []float64) {
 		return makeNoFilterH()
 	}
 }
-
+func (f *filter) applyParams(p *filterParams) {
+	f.a, f.b = makeH(p)
+	if len(f.past) == 0 {
+		f.past = make([]float64, int(math.Max(float64(len(f.a)-1), float64(len(f.b)))))
+	}
+}
+func (f *filter) process(in []float64, out []float64) {
+	processFilter(in, out, f.a, f.b, f.past)
+}
 func processFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
 	for i := 0; i < len(in); i++ {
 		out[i] = processFilterEach(in[i], a, b, past)
@@ -898,47 +904,33 @@ func impulseResponse(a []float64, b []float64, n int) []float64 {
 	processFilter(in, out, a, b, past)
 	return out
 }
-
 func frequencyResponse(a []float64, b []float64) []float64 {
 	h := impulseResponse(a, b, fftSize)
 	fft.CalcAbs(h)
 	return h[:fftSize/2]
 }
-
-func (f *filter) set(key string, value string) error {
+func (f *filterParams) set(key string, value string) error {
 	switch key {
 	case "kind":
 		f.kind = value
-		f.past = nil
-		f.a = nil
-		f.b = nil
 	case "freq":
 		freq, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
 		f.freq = freq
-		f.past = nil
-		f.a = nil
-		f.b = nil
 	case "q":
 		q, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
 		f.q = q
-		f.past = nil
-		f.a = nil
-		f.b = nil
 	case "gain":
 		gain, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
 		}
 		f.gain = gain
-		f.past = nil
-		f.a = nil
-		f.b = nil
 	}
 	return nil
 }
@@ -1199,6 +1191,7 @@ type state struct {
 	oscParams      *oscParams
 	adsrParams     *adsrParams
 	lfoParams      []*lfoParams
+	filterParams   *filterParams
 	envelopeParams []*envelopeParams
 	polyMode       bool
 	glideTime      int // ms
@@ -1244,7 +1237,7 @@ func (s *state) applyJSON(data json.RawMessage) {
 	} else {
 		log.Println("failed to apply JSON to envelope params")
 	}
-	s.filter.applyJSON(j.Filter)
+	s.filterParams.applyJSON(j.Filter)
 }
 func (s *state) toJSON() json.RawMessage {
 	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
@@ -1266,7 +1259,7 @@ func (s *state) toJSON() json.RawMessage {
 		Adsr:      s.adsrParams.toJSON(),
 		Lfos:      lfoJsons,
 		Envelopes: envelopeJsons,
-		Filter:    s.filter.toJSON(),
+		Filter:    s.filterParams.toJSON(),
 	})
 }
 
@@ -1276,12 +1269,13 @@ func newState() *state {
 		oscParams:      &oscParams{kind: "sine"},
 		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
+		filterParams:   &filterParams{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 		envelopeParams: []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
 		polyMode:       false,
 		glideTime:      100,
 		monoOsc:        newMonoOsc(),
 		polyOsc:        newPolyOsc(),
-		filter:         &filter{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
+		filter:         &filter{},
 		pos:            0,
 		out:            make([]float64, fftSize),
 	}
@@ -1351,9 +1345,11 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		out := a.state.out[offset : offset+bufSamples]
 		if a.state.polyMode {
 			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams)
+			a.state.filter.applyParams(a.state.filterParams)
 			a.state.filter.process(a.state.polyOsc.out, out)
 		} else {
 			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime)
+			a.state.filter.applyParams(a.state.filterParams)
 			a.state.filter.process(a.state.monoOsc.out, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
@@ -1455,7 +1451,7 @@ func (a *Audio) update(command []string) {
 			if len(command) != 2 {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
-			err := a.state.filter.set(command[0], command[1])
+			err := a.state.filterParams.set(command[0], command[1])
 			if err != nil {
 				panic(err)
 			}
@@ -1541,7 +1537,7 @@ func (a *Audio) Start(ctx context.Context) error {
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	_a, b := getH(a.state.filter)
+	_a, b := makeH(a.state.filterParams)
 	a.state.Unlock()
 	return frequencyResponse(_a, b)
 }
