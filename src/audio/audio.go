@@ -868,29 +868,28 @@ func getH(f *filter) ([]float64, []float64) {
 
 func processFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
 	for i := 0; i < len(in); i++ {
-		// get input
-		tmp := in[i]
-		// apply b
-		for j := 0; j < len(b); j++ {
-			tmp -= past[j] * b[j]
-		}
-		// apply a
-		o := tmp * a[0]
-		for j := 1; j < len(a); j++ {
-			o += past[j-1] * a[j]
-		}
-		// unshift f.past
-		for j := len(past) - 2; j >= 0; j-- {
-			past[j+1] = past[j]
-		}
-		if len(past) > 0 {
-			past[0] = tmp
-		}
-		// set output
-		out[i] = o
+		out[i] = processFilterEach(in[i], a, b, past)
 	}
 }
-
+func processFilterEach(in float64, a []float64, b []float64, past []float64) float64 {
+	// apply b
+	for j := 0; j < len(b); j++ {
+		in -= past[j] * b[j]
+	}
+	// apply a
+	o := in * a[0]
+	for j := 1; j < len(a); j++ {
+		o += past[j-1] * a[j]
+	}
+	// unshift f.past
+	for j := len(past) - 2; j >= 0; j-- {
+		past[j+1] = past[j]
+	}
+	if len(past) > 0 {
+		past[0] = in
+	}
+	return o
+}
 func impulseResponse(a []float64, b []float64, n int) []float64 {
 	in := make([]float64, n)
 	out := make([]float64, n)
