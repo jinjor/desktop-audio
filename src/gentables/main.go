@@ -27,7 +27,7 @@ func main() {
 		wts := audio.NewWavetableSet(numTables, numSamples)
 		wts.MakeBandLimitedTablesForAllNotes(numSamples, calcPartialSquareAtPhase)
 		log.Println("generated square wave")
-		err := wts.Save(dir + "/square")
+		err := wts.Save(dir + "/square.wt")
 		log.Println("saved square wave")
 		return err
 	})
@@ -35,7 +35,7 @@ func main() {
 		wts := audio.NewWavetableSet(numTables, numSamples)
 		wts.MakeBandLimitedTablesForAllNotes(numSamples, calcPartialSawAtPhase)
 		log.Println("generated saw wave")
-		err := wts.Save(dir + "/saw")
+		err := wts.Save(dir + "/saw.wt")
 		log.Println("saved saw wave")
 		return err
 	})

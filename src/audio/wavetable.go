@@ -3,6 +3,7 @@ package audio
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"os"
 )
@@ -115,14 +116,9 @@ func (wts *WavetableSet) Save(path string) error {
 }
 
 // Load ...
-func (wts *WavetableSet) Load(path string) error {
-	file, err := os.Open(path)
-	defer file.Close()
-	if err != nil {
-		return err
-	}
+func (wts *WavetableSet) Load(reader io.Reader) error {
 	var numTables int32
-	err = binary.Read(file, binary.BigEndian, &numTables)
+	err := binary.Read(reader, binary.BigEndian, &numTables)
 	if err != nil {
 		return err
 	}
@@ -132,7 +128,7 @@ func (wts *WavetableSet) Load(path string) error {
 	wts.tables = wts.tables[0:numTables]
 	for _, wt := range wts.tables {
 		var numSamples int32
-		err = binary.Read(file, binary.BigEndian, &numSamples)
+		err = binary.Read(reader, binary.BigEndian, &numSamples)
 		if err != nil {
 			return err
 		}
@@ -141,7 +137,7 @@ func (wts *WavetableSet) Load(path string) error {
 		}
 		wt.values = wt.values[0:numSamples]
 		for i := range wt.values {
-			err = binary.Read(file, binary.BigEndian, &wt.values[i])
+			err = binary.Read(reader, binary.BigEndian, &wt.values[i])
 			if err != nil {
 				return err
 			}

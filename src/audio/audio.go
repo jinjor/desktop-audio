@@ -1,7 +1,9 @@
 package audio
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -380,13 +382,20 @@ type osc struct {
 	nextFreq  float64
 }
 
-var blsquareWT *WavetableSet = loadWavetableSet("work/square")
-var blsawWT *WavetableSet = loadWavetableSet("work/saw")
+var blsquareWT, errBlsquareWT = loadWavetableSet("square.wt")
+var blsawWT, errBlsawWT = loadWavetableSet("saw.wt")
 
-func loadWavetableSet(path string) *WavetableSet {
+//go:embed wavetables
+var local embed.FS
+
+func loadWavetableSet(fileName string) (*WavetableSet, error) {
+	data, err := local.ReadFile("wavetables/" + fileName)
+	if err != nil {
+		return nil, err
+	}
 	wts := NewWavetableSet(128, 4096)
-	wts.Load(path)
-	return wts
+	wts.Load(bytes.NewReader(data))
+	return wts, nil
 }
 func noteWithParamsToFreq(p *oscParams, note int) float64 {
 	return noteToFreq(note) * math.Pow(2, float64(p.octave+p.coarse+p.fine/100/12))
@@ -1264,6 +1273,11 @@ func writeBuffer(out []float64, outOffset int64, buf []byte, ch int) {
 
 // NewAudio ...
 func NewAudio() (*Audio, error) {
+	if errBlsquareWT != nil || errBlsawWT != nil {
+		log.Println(errBlsquareWT)
+		log.Println(errBlsawWT)
+		panic("This binary was built without generating wabetables. Prepare them and build again!")
+	}
 	otoContext, err := oto.NewContext(sampleRate, channelNum, bitDepthInBytes, bufferSizeInBytes)
 	if err != nil {
 		return nil, err
