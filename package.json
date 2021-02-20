@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "start": "electron .",
-    "generate-wavetable": "go run src/gentables/main.go work",
+    "generate-wavetable": "go run src/gentables/main.go src/audio/wavetables",
     "build": "run-p build:*",
     "build:audio": "go build -o dist/audio src/main.go",
     "build:ui": "tsc",
