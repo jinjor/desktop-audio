@@ -5,39 +5,54 @@ import (
 	"math"
 )
 
-func makeNoFilterH() ([]float64, []float64) {
-	return []float64{1}, []float64{}
+func makeNewSliceIfLengthsAreNotTheSame(slice []float64, expectedLength int) []float64 {
+	if len(slice) == expectedLength {
+		return slice
+	}
+	if cap(slice) >= expectedLength {
+		return slice[:expectedLength]
+	}
+	return make([]float64, expectedLength)
 }
 
-func makeFIRLowpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
+func makeNoFilterH(feedforward []float64, feedback []float64) ([]float64, []float64) {
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 1)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 0)
+	feedforward[0] = 1
+	return feedforward, feedback
+}
+
+func makeFIRLowpassH(feedforward []float64, feedback []float64, N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
 	w0 := 2 * math.Pi * fc
 	if N%2 != 0 {
 		log.Panicf("N should be even")
 	}
-	h := make([]float64, N+1)
+	h := makeNewSliceIfLengthsAreNotTheSame(feedforward, N+1)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 0)
 	for i := 0; i <= N; i++ {
 		n := float64(i - N/2)
 		h[i] = 2 * fc * sinc(w0*n)
 	}
 	applyWindow(h, windowFunc)
-	return h, []float64{}
+	return h, feedback
 }
 
-func makeFIRHighpassH(N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
+func makeFIRHighpassH(feedforward []float64, feedback []float64, N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
 	w0 := 2 * math.Pi * fc
 	if N%2 != 0 {
 		log.Panicf("N should be even")
 	}
-	h := make([]float64, N+1)
+	h := makeNewSliceIfLengthsAreNotTheSame(feedforward, N+1)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 0)
 	for i := 0; i <= N; i++ {
 		n := float64(i - N/2)
 		h[i] = sinc(math.Pi*n) - 2*fc*sinc(w0*n)
 	}
 	applyWindow(h, windowFunc)
-	return h, []float64{}
+	return h, feedback
 }
 
-func makeBiquadLowpassH(fc float64, q float64) ([]float64, []float64) {
+func makeBiquadLowpassH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -47,10 +62,13 @@ func makeBiquadLowpassH(fc float64, q float64) ([]float64, []float64) {
 	a0 := 1 + alpha
 	a1 := -2 * math.Cos(w0)
 	a2 := 1 - alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
-
-func makeBiquadHighpassH(fc float64, q float64) ([]float64, []float64) {
+func makeBiquadHighpassH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -60,10 +78,14 @@ func makeBiquadHighpassH(fc float64, q float64) ([]float64, []float64) {
 	a0 := 1 + alpha
 	a1 := -2 * math.Cos(w0)
 	a2 := 1 - alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
-func makeBiquadBandpass1H(fc float64, q float64) ([]float64, []float64) {
+func makeBiquadBandpass1H(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -73,10 +95,14 @@ func makeBiquadBandpass1H(fc float64, q float64) ([]float64, []float64) {
 	a0 := 1 + alpha
 	a1 := -2 * math.Cos(w0)
 	a2 := 1 - alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
-func makeBiquadBandpass2H(fc float64, q float64) ([]float64, []float64) {
+func makeBiquadBandpass2H(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -86,10 +112,14 @@ func makeBiquadBandpass2H(fc float64, q float64) ([]float64, []float64) {
 	a0 := 1 + alpha
 	a1 := -2 * math.Cos(w0)
 	a2 := 1 - alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
-func makeBiquadNotchH(fc float64, q float64) ([]float64, []float64) {
+func makeBiquadNotchH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -99,10 +129,14 @@ func makeBiquadNotchH(fc float64, q float64) ([]float64, []float64) {
 	a0 := 1 + alpha
 	a1 := -2 * math.Cos(w0)
 	a2 := 1 - alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
-func makeBiquadAllpassH(fc float64, q float64) ([]float64, []float64) {
+func makeBiquadAllpassH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -112,10 +146,14 @@ func makeBiquadAllpassH(fc float64, q float64) ([]float64, []float64) {
 	a0 := 1 + alpha
 	a1 := -2 * math.Cos(w0)
 	a2 := 1 - alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
-func makeBiquadPeakingEQH(fc float64, q float64, dBgain float64) ([]float64, []float64) {
+func makeBiquadPeakingEQH(feedforward []float64, feedback []float64, fc float64, q float64, dBgain float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -126,10 +164,14 @@ func makeBiquadPeakingEQH(fc float64, q float64, dBgain float64) ([]float64, []f
 	a0 := 1 + alpha/A
 	a1 := -2 * math.Cos(w0)
 	a2 := 1 - alpha/A
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
-func makeBiquadLowShelfH(fc float64, q float64, dBgain float64) ([]float64, []float64) {
+func makeBiquadLowShelfH(feedforward []float64, feedback []float64, fc float64, q float64, dBgain float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -140,10 +182,14 @@ func makeBiquadLowShelfH(fc float64, q float64, dBgain float64) ([]float64, []fl
 	a0 := (A + 1) + (A-1)*math.Cos(w0) + 2*math.Sqrt(A)*alpha
 	a1 := -2 * ((A - 1) + (A+1)*math.Cos(w0))
 	a2 := (A + 1) + (A-1)*math.Cos(w0) - 2*math.Sqrt(A)*alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
-func makeBiquadHighShelfH(fc float64, q float64, dBgain float64) ([]float64, []float64) {
+func makeBiquadHighShelfH(feedforward []float64, feedback []float64, fc float64, q float64, dBgain float64) ([]float64, []float64) {
 	// from RBJ's cookbook
 	w0 := 2 * math.Pi * fc
 	alpha := math.Sin(w0) / (2 * q)
@@ -154,7 +200,11 @@ func makeBiquadHighShelfH(fc float64, q float64, dBgain float64) ([]float64, []f
 	a0 := (A + 1) - (A-1)*math.Cos(w0) + 2*math.Sqrt(A)*alpha
 	a1 := 2 * ((A - 1) - (A+1)*math.Cos(w0))
 	a2 := (A + 1) - (A-1)*math.Cos(w0) - 2*math.Sqrt(A)*alpha
-	return []float64{b0 / a0, b1 / a0, b2 / a0}, []float64{a1 / a0, a2 / a0}
+	feedforward = makeNewSliceIfLengthsAreNotTheSame(feedforward, 3)
+	feedback = makeNewSliceIfLengthsAreNotTheSame(feedback, 2)
+	feedforward[0], feedforward[1], feedforward[2] = b0/a0, b1/a0, b2/a0
+	feedback[0], feedback[1] = a1/a0, a2/a0
+	return feedforward, feedback
 }
 
 func sinc(x float64) float64 {

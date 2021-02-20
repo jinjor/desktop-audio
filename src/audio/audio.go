@@ -711,43 +711,44 @@ type filter struct {
 	past []float64
 }
 
-func makeH(f *filterParams) ([]float64, []float64) {
+func makeH(feedforward []float64, feedback []float64, f *filterParams) ([]float64, []float64) {
 	fc := f.freq / sampleRate
 	switch f.kind {
 	case "lowpass-fir":
-		return makeFIRLowpassH(f.N, fc, hamming)
+		return makeFIRLowpassH(feedforward, feedback, f.N, fc, hamming)
 	case "highpass-fir":
-		return makeFIRHighpassH(f.N, fc, hamming)
+		return makeFIRHighpassH(feedforward, feedback, f.N, fc, hamming)
 	case "lowpass":
-		return makeBiquadLowpassH(fc, f.q)
+		return makeBiquadLowpassH(feedforward, feedback, fc, f.q)
 	case "highpass":
-		return makeBiquadHighpassH(fc, f.q)
+		return makeBiquadHighpassH(feedforward, feedback, fc, f.q)
 	case "bandpass-1":
-		return makeBiquadBandpass1H(fc, f.q)
+		return makeBiquadBandpass1H(feedforward, feedback, fc, f.q)
 	case "bandpass-2":
-		return makeBiquadBandpass2H(fc, f.q)
+		return makeBiquadBandpass2H(feedforward, feedback, fc, f.q)
 	case "notch":
-		return makeBiquadNotchH(fc, f.q)
+		return makeBiquadNotchH(feedforward, feedback, fc, f.q)
 	case "peaking":
-		return makeBiquadPeakingEQH(fc, f.q, f.gain)
+		return makeBiquadPeakingEQH(feedforward, feedback, fc, f.q, f.gain)
 	case "lowshelf":
-		return makeBiquadLowShelfH(fc, f.q, f.gain)
+		return makeBiquadLowShelfH(feedforward, feedback, fc, f.q, f.gain)
 	case "highshelf":
-		return makeBiquadHighShelfH(fc, f.q, f.gain)
+		return makeBiquadHighShelfH(feedforward, feedback, fc, f.q, f.gain)
 	case "none":
 		fallthrough
 	default:
-		return makeNoFilterH()
+		return makeNoFilterH(feedforward, feedback)
 	}
 }
-func (f *filter) applyParams(p *filterParams) {
-	f.a, f.b = makeH(p)
-	if len(f.past) == 0 {
-		f.past = make([]float64, int(math.Max(float64(len(f.a)-1), float64(len(f.b)))))
+func (f *filter) process(in []float64, out []float64, p *filterParams) {
+	for i := 0; i < len(in); i++ {
+		f.a, f.b = makeH(f.a, f.b, p)
+		pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
+		if len(f.past) < pastLength {
+			f.past = make([]float64, pastLength)
+		}
+		out[i] = processFilterEach(in[i], f.a, f.b, f.past)
 	}
-}
-func (f *filter) process(in []float64, out []float64) {
-	processFilter(in, out, f.a, f.b, f.past)
 }
 func processFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
 	for i := 0; i < len(in); i++ {
@@ -1222,12 +1223,10 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		out := a.state.out[offset : offset+bufSamples]
 		if a.state.polyMode {
 			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams)
-			a.state.filter.applyParams(a.state.filterParams)
-			a.state.filter.process(a.state.polyOsc.out, out)
+			a.state.filter.process(a.state.polyOsc.out, out, a.state.filterParams)
 		} else {
 			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime)
-			a.state.filter.applyParams(a.state.filterParams)
-			a.state.filter.process(a.state.monoOsc.out, out)
+			a.state.filter.process(a.state.monoOsc.out, out, a.state.filterParams)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
@@ -1411,12 +1410,15 @@ func (a *Audio) Start(ctx context.Context) error {
 	return nil
 }
 
+var filterShapeFeedforward = []float64{}
+var filterShapeFeedback = []float64{}
+
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	_a, b := makeH(a.state.filterParams)
+	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams)
 	a.state.Unlock()
-	return frequencyResponse(_a, b)
+	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
 }
 
 // GetFFT ...
