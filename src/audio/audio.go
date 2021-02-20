@@ -86,7 +86,6 @@ type noteOff struct {
 type monoOsc struct {
 	o           *decoratedOsc
 	activeNotes []int
-	out         []float64 // length: samplesPerCycle
 }
 
 func newMonoOsc() *monoOsc {
@@ -94,11 +93,11 @@ func newMonoOsc() *monoOsc {
 		o: &decoratedOsc{
 			osc:       &osc{phase01: rand.Float64()},
 			adsr:      &adsr{},
+			filter:    &filter{},
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
 			envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
 		},
 		activeNotes: make([]int, 0, 128),
-		out:         make([]float64, samplesPerCycle),
 	}
 }
 
@@ -106,9 +105,11 @@ func (m *monoOsc) calc(
 	events [][]*midiEvent,
 	oscParams *oscParams,
 	adsrParams *adsrParams,
+	filterParams *filterParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
 	glideTime int,
+	out []float64,
 ) {
 	for i, lfo := range m.o.lfos {
 		lfo.applyParams(lfoParams[i])
@@ -118,7 +119,7 @@ func (m *monoOsc) calc(
 		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
 	}
 	m.o.adsr.setParams(adsrParams)
-	for i := int64(0); i < int64(len(m.out)); i++ {
+	for i := int64(0); i < int64(len(out)); i++ {
 		event := enumNoEvent
 		for _, e := range events[i] {
 			switch data := e.event.(type) {
@@ -153,7 +154,7 @@ func (m *monoOsc) calc(
 				}
 			}
 		}
-		m.out[i] = m.o.step(event)
+		out[i] = m.o.step(event, filterParams)
 	}
 }
 
@@ -163,7 +164,6 @@ type polyOsc struct {
 	// pooled + active = maxPoly
 	pooled []*noteOsc
 	active []*noteOsc
-	out    []float64 // length: samplesPerCycle
 }
 
 type noteOsc struct {
@@ -178,6 +178,7 @@ func newPolyOsc() *polyOsc {
 			decoratedOsc: &decoratedOsc{
 				osc:       &osc{phase01: rand.Float64()},
 				adsr:      &adsr{},
+				filter:    &filter{},
 				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
 				envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
 			},
@@ -185,7 +186,6 @@ func newPolyOsc() *polyOsc {
 	}
 	return &polyOsc{
 		pooled: pooled,
-		out:    make([]float64, samplesPerCycle),
 	}
 }
 
@@ -193,10 +193,12 @@ func (p *polyOsc) calc(
 	events [][]*midiEvent,
 	oscParams *oscParams,
 	adsrParams *adsrParams,
+	filterParams *filterParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
+	out []float64,
 ) {
-	for i := int64(0); i < int64(len(p.out)); i++ {
+	for i := int64(0); i < int64(len(out)); i++ {
 		events := events[i]
 		for j := 0; j < len(events); j++ {
 			switch data := events[j].event.(type) {
@@ -223,7 +225,7 @@ func (p *polyOsc) calc(
 				envelope.adsr.applyEnvelopeParams(envelopeParams[i])
 			}
 		}
-		p.out[i] = 0.0
+		out[i] = 0.0
 		for _, o := range p.active {
 			event := enumNoEvent
 			for _, e := range events {
@@ -238,7 +240,7 @@ func (p *polyOsc) calc(
 					}
 				}
 			}
-			p.out[i] += o.step(event)
+			out[i] += o.step(event, filterParams)
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
@@ -255,6 +257,7 @@ func (p *polyOsc) calc(
 type decoratedOsc struct {
 	osc       *osc
 	adsr      *adsr
+	filter    *filter
 	lfos      []*lfo
 	envelopes []*envelope
 }
@@ -263,7 +266,7 @@ const enumNoEvent = 0
 const enumNoteOn = 1
 const enumNoteOff = 2
 
-func (o *decoratedOsc) step(event int) float64 {
+func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	switch event {
 	case enumNoEvent:
 	case enumNoteOn:
@@ -305,7 +308,8 @@ func (o *decoratedOsc) step(event int) float64 {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
 	}
-	return o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+	value := o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+	return o.filter.processOneSample(value, filterParams, o.envelopes)
 }
 
 // ----- OSC ----- //
@@ -701,6 +705,31 @@ func (f *filterParams) toJSON() json.RawMessage {
 		Gain: f.gain,
 	})
 }
+func (f *filterParams) set(key string, value string) error {
+	switch key {
+	case "kind":
+		f.kind = value
+	case "freq":
+		freq, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.freq = freq
+	case "q":
+		q, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.q = q
+	case "gain":
+		gain, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.gain = gain
+	}
+	return nil
+}
 
 type filter struct {
 	freq float64
@@ -711,8 +740,22 @@ type filter struct {
 	past []float64
 }
 
-func makeH(feedforward []float64, feedback []float64, f *filterParams) ([]float64, []float64) {
-	fc := f.freq / sampleRate
+func (f *filter) processOneSample(in float64, p *filterParams, envelopes []*envelope) float64 {
+	freqRatio := 1.0
+	for _, envelope := range envelopes {
+		if envelope.destination == "filter_freq" {
+			freqRatio *= math.Pow(16.0, envelope.value)
+		}
+	}
+	f.a, f.b = makeH(f.a, f.b, p, freqRatio)
+	pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
+	if len(f.past) < pastLength {
+		f.past = make([]float64, pastLength)
+	}
+	return calcFilterOneSample(in, f.a, f.b, f.past)
+}
+func makeH(feedforward []float64, feedback []float64, f *filterParams, freqRatio float64) ([]float64, []float64) {
+	fc := f.freq * freqRatio / sampleRate
 	switch f.kind {
 	case "lowpass-fir":
 		return makeFIRLowpassH(feedforward, feedback, f.N, fc, hamming)
@@ -740,22 +783,12 @@ func makeH(feedforward []float64, feedback []float64, f *filterParams) ([]float6
 		return makeNoFilterH(feedforward, feedback)
 	}
 }
-func (f *filter) process(in []float64, out []float64, p *filterParams) {
+func calcFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
 	for i := 0; i < len(in); i++ {
-		f.a, f.b = makeH(f.a, f.b, p)
-		pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
-		if len(f.past) < pastLength {
-			f.past = make([]float64, pastLength)
-		}
-		out[i] = processFilterEach(in[i], f.a, f.b, f.past)
+		out[i] = calcFilterOneSample(in[i], a, b, past)
 	}
 }
-func processFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
-	for i := 0; i < len(in); i++ {
-		out[i] = processFilterEach(in[i], a, b, past)
-	}
-}
-func processFilterEach(in float64, a []float64, b []float64, past []float64) float64 {
+func calcFilterOneSample(in float64, a []float64, b []float64, past []float64) float64 {
 	// apply b
 	for j := 0; j < len(b); j++ {
 		in -= past[j] * b[j]
@@ -779,38 +812,13 @@ func impulseResponse(a []float64, b []float64, n int) []float64 {
 	out := make([]float64, n)
 	past := make([]float64, int(math.Max(float64(len(a)-1), float64(len(b)))))
 	in[0] = 1
-	processFilter(in, out, a, b, past)
+	calcFilter(in, out, a, b, past)
 	return out
 }
 func frequencyResponse(a []float64, b []float64) []float64 {
 	h := impulseResponse(a, b, fftSize)
 	fft.CalcAbs(h)
 	return h[:fftSize/2]
-}
-func (f *filterParams) set(key string, value string) error {
-	switch key {
-	case "kind":
-		f.kind = value
-	case "freq":
-		freq, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		f.freq = freq
-	case "q":
-		q, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		f.q = q
-	case "gain":
-		gain, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return err
-		}
-		f.gain = gain
-	}
-	return nil
 }
 
 // ----- Envelope ----- //
@@ -1075,7 +1083,6 @@ type state struct {
 	glideTime      int // ms
 	monoOsc        *monoOsc
 	polyOsc        *polyOsc
-	filter         *filter
 	pos            int64
 	out            []float64 // length: fftSize
 	lastRead       float64
@@ -1153,7 +1160,6 @@ func newState() *state {
 		glideTime:      100,
 		monoOsc:        newMonoOsc(),
 		polyOsc:        newPolyOsc(),
-		filter:         &filter{},
 		pos:            0,
 		out:            make([]float64, fftSize),
 	}
@@ -1222,11 +1228,9 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams)
-			a.state.filter.process(a.state.polyOsc.out, out, a.state.filterParams)
+			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.lfoParams, a.state.envelopeParams, out)
 		} else {
-			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime)
-			a.state.filter.process(a.state.monoOsc.out, out, a.state.filterParams)
+			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
@@ -1416,7 +1420,7 @@ var filterShapeFeedback = []float64{}
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams)
+	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0)
 	a.state.Unlock()
 	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
 }
