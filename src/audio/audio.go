@@ -269,6 +269,9 @@ const enumNoEvent = 0
 const enumNoteOn = 1
 const enumNoteOff = 2
 
+var lfoFreqKey = [3]string{"lfo0_freq", "lfo1_freq", "lfo2_freq"}
+var lfoAmountKey = [3]string{"lfo0_amount", "lfo1_amount", "lfo2_amount"}
+
 func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	switch event {
 	case enumNoEvent:
@@ -295,10 +298,10 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		amountGain := 1.0
 		lfoFreqRatio := 1.0
 		for _, envelope := range o.envelopes {
-			if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_amount" {
+			if envelope.destination == lfoAmountKey[lfoIndex] {
 				amountGain *= envelope.value
 			}
-			if envelope.destination == "lfo"+fmt.Sprint(lfoIndex)+"_freq" {
+			if envelope.destination == lfoFreqKey[lfoIndex] {
 				lfoFreqRatio *= math.Pow(16.0, envelope.value)
 			}
 		}
@@ -1424,6 +1427,13 @@ func (a *Audio) Read(buf []byte) (int, error) {
 				a.state.events[i-eventLength/2] = a.state.events[i]
 			}
 			a.state.events[i] = nil
+		}
+		endTime := now()
+		duration := endTime - timestamp
+		if duration > responseDelay {
+			log.Println("[WARN] time budget exceeded:", fmt.Sprint(int(duration*1000))+"ms")
+		} else {
+			// log.Println(fmt.Sprint(int(duration*1000)) + "ms")
 		}
 		return len(buf), nil // io.EOF, etc.
 	}
