@@ -287,6 +287,7 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	freqRatio := 1.0
 	phaseShift := 0.0
 	ampRatio := 1.0
+	filterFreqRatio := 1.0
 	for lfoIndex, lfo := range o.lfos {
 		amountGain := 1.0
 		lfoFreqRatio := 1.0
@@ -298,10 +299,11 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 				lfoFreqRatio *= math.Pow(16.0, envelope.value)
 			}
 		}
-		_freqRatio, _phaseShift, _ampRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
+		_freqRatio, _phaseShift, _ampRatio, _filterFreqRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
 		freqRatio *= _freqRatio
 		phaseShift += _phaseShift
 		ampRatio *= _ampRatio
+		filterFreqRatio *= _filterFreqRatio
 	}
 	for _, envelope := range o.envelopes {
 		if envelope.destination == "freq" {
@@ -309,7 +311,7 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		}
 	}
 	value := o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
-	return o.filter.processOneSample(value, filterParams, o.envelopes)
+	return o.filter.processOneSample(value, filterParams, filterFreqRatio, o.envelopes)
 }
 
 // ----- OSC ----- //
@@ -754,8 +756,7 @@ type filter struct {
 	past []float64
 }
 
-func (f *filter) processOneSample(in float64, p *filterParams, envelopes []*envelope) float64 {
-	freqRatio := 1.0
+func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64, envelopes []*envelope) float64 {
 	qExponent := 1.0
 	gainRatio := 1.0
 	for _, envelope := range envelopes {
@@ -1073,10 +1074,11 @@ func (l *lfo) applyParams(p *lfoParams) {
 	l.amount = p.amount
 }
 
-func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float64, float64, float64) {
+func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float64, float64, float64, float64) {
 	freqRatio := 1.0
 	phaseShift := 0.0
 	ampRatio := 1.0
+	filterFreqRatio := 1.0
 	switch l.destination {
 	case "vibrato":
 		amount := l.amount * amountGain
@@ -1093,8 +1095,11 @@ func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float
 	case "am":
 		amount := l.amount * amountGain
 		ampRatio = 1.0 + l.osc.step(career.freq*lfoFreqRatio, 0.0)*amount
+	case "filter_freq":
+		amount := l.amount * amountGain
+		filterFreqRatio = math.Pow(16.0, l.osc.step(lfoFreqRatio, 0.0)*amount)
 	}
-	return freqRatio, phaseShift, ampRatio
+	return freqRatio, phaseShift, ampRatio, filterFreqRatio
 }
 
 // ----- Changes ----- //
