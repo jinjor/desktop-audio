@@ -109,6 +109,7 @@ func (m *monoOsc) calc(
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
 	glideTime int,
+	echo *echo,
 	out []float64,
 ) {
 	for i, lfo := range m.o.lfos {
@@ -154,7 +155,7 @@ func (m *monoOsc) calc(
 				}
 			}
 		}
-		out[i] = m.o.step(event, filterParams)
+		out[i] = echo.step(m.o.step(event, filterParams))
 	}
 }
 
@@ -196,6 +197,7 @@ func (p *polyOsc) calc(
 	filterParams *filterParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
+	echo *echo,
 	out []float64,
 ) {
 	for i := int64(0); i < int64(len(out)); i++ {
@@ -249,6 +251,7 @@ func (p *polyOsc) calc(
 				p.pooled = append(p.pooled, o)
 			}
 		}
+		out[i] = echo.step(out[i])
 	}
 }
 
@@ -853,6 +856,113 @@ func frequencyResponse(a []float64, b []float64) []float64 {
 	return h[:fftSize/2]
 }
 
+// ----- Delay ----- //
+
+type delay struct {
+	cursor int
+	past   []float64
+}
+
+func (d *delay) applyParams(millis float64) {
+	length := int(sampleRate * millis / 1000)
+	if cap(d.past) >= length {
+		d.past = d.past[0:length]
+	} else {
+		d.past = make([]float64, length)
+	}
+	if d.cursor >= len(d.past) {
+		d.cursor = 0
+	}
+}
+
+func (d *delay) step(in float64) {
+	d.past[d.cursor] = in
+	d.cursor++
+	if d.cursor >= len(d.past) {
+		d.cursor = 0
+	}
+}
+func (d *delay) getDelayed() float64 {
+	return d.past[d.cursor]
+}
+
+// ----- Echo ----- //
+
+type echoParams struct {
+	delay        float64
+	feedbackGain float64
+	mix          float64
+}
+
+type echoJSON struct {
+	Delay        float64 `json:"delay"`
+	FeedbackGain float64 `json:"feedbackGain"`
+	Mix          float64 `json:"mix"`
+}
+
+func (l *echoParams) applyJSON(data json.RawMessage) {
+	var j echoJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to echoParams")
+		return
+	}
+	l.delay = j.Delay
+	l.feedbackGain = j.FeedbackGain
+	l.mix = j.Mix
+}
+func (l *echoParams) toJSON() json.RawMessage {
+	return toRawMessage(&echoJSON{
+		Delay:        l.delay,
+		FeedbackGain: l.feedbackGain,
+		Mix:          l.mix,
+	})
+}
+func (l *echoParams) set(key string, value string) error {
+	switch key {
+	case "delay":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.delay = value
+	case "feedbackGain":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.feedbackGain = value
+	case "mix":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		l.mix = value
+	}
+	return nil
+}
+
+type echo struct {
+	delay        *delay
+	feedbackGain float64 // [0,1)
+	mix          float64 // [0,1]
+}
+
+func (e *echo) applyParams(p *echoParams) {
+	e.delay.applyParams(p.delay)
+	e.feedbackGain = p.feedbackGain
+	e.mix = p.mix
+}
+
+func (e *echo) step(in float64) float64 {
+	if len(e.delay.past) == 0 {
+		return in
+	}
+	delayed := e.delay.getDelayed()
+	e.delay.step(in + delayed*e.feedbackGain)
+	return in + delayed*e.mix
+}
+
 // ----- Envelope ----- //
 
 type envelopeParams struct {
@@ -1142,10 +1252,12 @@ type state struct {
 	lfoParams      []*lfoParams
 	filterParams   *filterParams
 	envelopeParams []*envelopeParams
+	echoParams     *echoParams
 	polyMode       bool
 	glideTime      int // ms
 	monoOsc        *monoOsc
 	polyOsc        *polyOsc
+	echo           *echo
 	pos            int64
 	out            []float64 // length: fftSize
 	lastRead       float64
@@ -1158,6 +1270,7 @@ type stateJSON struct {
 	Lfos      []json.RawMessage `json:"lfos"`
 	Envelopes []json.RawMessage `json:"envelopes"`
 	Filter    json.RawMessage   `json:"filter"`
+	Echo      json.RawMessage   `json:"echo"`
 }
 
 func (s *state) applyJSON(data json.RawMessage) {
@@ -1171,6 +1284,7 @@ func (s *state) applyJSON(data json.RawMessage) {
 	s.glideTime = j.GlideTime
 	s.oscParams.applyJSON(j.Osc)
 	s.adsrParams.applyJSON(j.Adsr)
+	s.filterParams.applyJSON(j.Filter)
 	if len(j.Lfos) == len(s.lfoParams) {
 		for i, j := range j.Lfos {
 			s.lfoParams[i].applyJSON(j)
@@ -1185,7 +1299,7 @@ func (s *state) applyJSON(data json.RawMessage) {
 	} else {
 		log.Println("failed to apply JSON to envelope params")
 	}
-	s.filterParams.applyJSON(j.Filter)
+	s.echoParams.applyJSON(j.Echo)
 }
 func (s *state) toJSON() json.RawMessage {
 	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
@@ -1208,6 +1322,7 @@ func (s *state) toJSON() json.RawMessage {
 		Lfos:      lfoJsons,
 		Envelopes: envelopeJsons,
 		Filter:    s.filterParams.toJSON(),
+		Echo:      s.echoParams.toJSON(),
 	})
 }
 
@@ -1219,10 +1334,12 @@ func newState() *state {
 		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
 		filterParams:   &filterParams{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
 		envelopeParams: []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
+		echoParams:     &echoParams{},
 		polyMode:       false,
 		glideTime:      100,
 		monoOsc:        newMonoOsc(),
 		polyOsc:        newPolyOsc(),
+		echo:           &echo{delay: &delay{}},
 		pos:            0,
 		out:            make([]float64, fftSize),
 	}
@@ -1290,10 +1407,12 @@ func (a *Audio) Read(buf []byte) (int, error) {
 
 		offset := a.state.pos % fftSize
 		out := a.state.out[offset : offset+bufSamples]
+
+		a.state.echo.applyParams(a.state.echoParams)
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.lfoParams, a.state.envelopeParams, out)
+			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.lfoParams, a.state.envelopeParams, a.state.echo, out)
 		} else {
-			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime, out)
+			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime, a.state.echo, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
@@ -1424,6 +1543,15 @@ func (a *Audio) update(command []string) {
 				panic(fmt.Errorf("invalid key-value pair %v", command))
 			}
 			err = a.state.envelopeParams[index].set(command[0], command[1])
+			if err != nil {
+				panic(err)
+			}
+		case "echo":
+			command = command[1:]
+			if len(command) != 2 {
+				panic(fmt.Errorf("invalid key-value pair %v", command))
+			}
+			err := a.state.echoParams.set(command[0], command[1])
 			if err != nil {
 				panic(err)
 			}

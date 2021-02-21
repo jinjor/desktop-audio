@@ -667,7 +667,57 @@ const EnvelopeAmount = React.memo(
     );
   }
 );
-
+const EchoDelay = React.memo(
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedEchoDelay", value });
+    return (
+      <LabeledKnob
+        min={10}
+        max={800}
+        steps={791}
+        exponential={true}
+        value={o.value}
+        onChange={onChange}
+        label="Delay"
+      />
+    );
+  }
+);
+const EchoFeedbackGain = React.memo(
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedEchoFeedbackGain", value });
+    return (
+      <LabeledKnob
+        min={0}
+        max={0.5}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        onChange={onChange}
+        label="FeedbackGain"
+      />
+    );
+  }
+);
+const EchoMix = React.memo(
+  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedEchoMix", value });
+    return (
+      <LabeledKnob
+        min={0}
+        max={1.0}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        onChange={onChange}
+        label="Mix"
+      />
+    );
+  }
+);
 const Canvas = (props: {
   listen: (canvas: HTMLCanvasElement) => () => void;
   [key: string]: any;
@@ -804,6 +854,11 @@ const stateDecoder = d.object({
     q: d.number(),
     gain: d.number(),
   }),
+  echo: d.object({
+    delay: d.number(),
+    feedbackGain: d.number(),
+    mix: d.number(),
+  }),
 });
 type State = d.TypeOf<typeof stateDecoder>;
 type Action =
@@ -829,7 +884,10 @@ type Action =
   | { type: "changedFilterKind"; value: string }
   | { type: "changedFilterFreq"; value: number }
   | { type: "changedFilterQ"; value: number }
-  | { type: "changedFilterGain"; value: number };
+  | { type: "changedFilterGain"; value: number }
+  | { type: "changedEchoDelay"; value: number }
+  | { type: "changedEchoFeedbackGain"; value: number }
+  | { type: "changedEchoMix"; value: number };
 
 const App = () => {
   const initialState: State = {
@@ -847,13 +905,18 @@ const App = () => {
       sustain: 0.7,
       release: 100,
     },
-    lfos: [defaultLFO, defaultLFO, defaultLFO],
-    envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],
     filter: {
       kind: "none",
       freq: 1000,
       q: 0,
       gain: 0,
+    },
+    lfos: [defaultLFO, defaultLFO, defaultLFO],
+    envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],
+    echo: {
+      delay: 100,
+      feedbackGain: 0,
+      mix: 0,
     },
   };
   const [state, dispatch] = useReducer((state: State, action: Action) => {
@@ -1077,6 +1140,30 @@ const App = () => {
           filter: { ...state.filter, gain: value },
         };
       }
+      case "changedEchoDelay": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "echo", "delay", value]);
+        return {
+          ...state,
+          echo: { ...state.echo, delay: value },
+        };
+      }
+      case "changedEchoFeedbackGain": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "echo", "feedbackGain", value]);
+        return {
+          ...state,
+          echo: { ...state.echo, feedbackGain: value },
+        };
+      }
+      case "changedEchoMix": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "echo", "mix", value]);
+        return {
+          ...state,
+          echo: { ...state.echo, mix: value },
+        };
+      }
     }
   }, initialState);
   useEffect(() => {
@@ -1145,6 +1232,16 @@ const App = () => {
           value={state.envelopes[2]}
           dispatch={dispatch}
         />
+        <EditGroup label="Echo">
+          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+            <EchoDelay value={state.echo.delay} dispatch={dispatch} />
+            <EchoFeedbackGain
+              value={state.echo.feedbackGain}
+              dispatch={dispatch}
+            />
+            <EchoMix value={state.echo.mix} dispatch={dispatch} />
+          </div>
+        </EditGroup>
       </div>
       <Notes />
       <Spectrum />
