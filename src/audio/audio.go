@@ -572,16 +572,27 @@ func (a *adsr) setParams(p *adsrParams) {
 	a.release = p.release
 }
 func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
-	a.base = 1
-	a.peek = 0
-	if p.destination == "freq" ||
+	if p.destination == "vibrato" ||
+		p.destination == "tremolo" ||
+		p.destination == "filter_q_0v" ||
+		p.destination == "filter_gain_0v" ||
+		p.destination == "lfo0_amount" ||
+		p.destination == "lfo1_amount" ||
+		p.destination == "lfo2_amount" {
+		// zero-to-value
+		a.base = 1
+		a.peek = 0
+	} else if p.destination == "freq" ||
 		p.destination == "filter_freq" ||
 		p.destination == "lfo0_freq" ||
 		p.destination == "lfo1_freq" ||
 		p.destination == "lfo2_freq" {
+		// amount-to-value
 		a.base = 0
 		a.peek = p.amount
-	} else if p.destination == "filter_q" {
+	} else if p.destination == "filter_q" ||
+		p.destination == "filter_gain" {
+		// value-to-zero
 		a.base = 0
 		a.peek = 1
 	}
@@ -746,24 +757,36 @@ type filter struct {
 func (f *filter) processOneSample(in float64, p *filterParams, envelopes []*envelope) float64 {
 	freqRatio := 1.0
 	qExponent := 1.0
+	gainRatio := 1.0
 	for _, envelope := range envelopes {
 		if envelope.destination == "filter_freq" {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
-		if envelope.destination == "filter_q" {
+		if envelope.destination == "filter_q" || envelope.destination == "filter_q_0v" {
 			qExponent *= envelope.value
 		}
+		if envelope.destination == "filter_gain" || envelope.destination == "filter_gain_0v" {
+			gainRatio *= envelope.value
+		}
 	}
-	f.a, f.b = makeH(f.a, f.b, p, freqRatio, qExponent)
+	f.a, f.b = makeH(f.a, f.b, p, freqRatio, qExponent, gainRatio)
 	pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
 	if len(f.past) < pastLength {
 		f.past = make([]float64, pastLength)
 	}
 	return calcFilterOneSample(in, f.a, f.b, f.past)
 }
-func makeH(feedforward []float64, feedback []float64, f *filterParams, freqRatio float64, qExponent float64) ([]float64, []float64) {
+func makeH(
+	feedforward []float64,
+	feedback []float64,
+	f *filterParams,
+	freqRatio float64,
+	qExponent float64,
+	gainRatio float64,
+) ([]float64, []float64) {
 	fc := f.freq * freqRatio / sampleRate
 	q := math.Pow(f.q, qExponent)
+	gain := f.gain * gainRatio
 	switch f.kind {
 	case "lowpass-fir":
 		return makeFIRLowpassH(feedforward, feedback, f.N, fc, hamming)
@@ -780,11 +803,11 @@ func makeH(feedforward []float64, feedback []float64, f *filterParams, freqRatio
 	case "notch":
 		return makeBiquadNotchH(feedforward, feedback, fc, q)
 	case "peaking":
-		return makeBiquadPeakingEQH(feedforward, feedback, fc, q, f.gain)
+		return makeBiquadPeakingEQH(feedforward, feedback, fc, q, gain)
 	case "lowshelf":
-		return makeBiquadLowShelfH(feedforward, feedback, fc, q, f.gain)
+		return makeBiquadLowShelfH(feedforward, feedback, fc, q, gain)
 	case "highshelf":
-		return makeBiquadHighShelfH(feedforward, feedback, fc, q, f.gain)
+		return makeBiquadHighShelfH(feedforward, feedback, fc, q, gain)
 	case "none":
 		fallthrough
 	default:
@@ -1455,7 +1478,7 @@ var filterShapeFeedback = []float64{}
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0, 1.0)
+	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0, 1.0, 1.0)
 	a.state.Unlock()
 	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
 }
