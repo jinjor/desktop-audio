@@ -581,6 +581,9 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 		p.destination == "lfo2_freq" {
 		a.base = 0
 		a.peek = p.amount
+	} else if p.destination == "filter_q" {
+		a.base = 0
+		a.peek = 1
 	}
 	a.attack = 0
 	a.keep = p.delay
@@ -742,41 +745,46 @@ type filter struct {
 
 func (f *filter) processOneSample(in float64, p *filterParams, envelopes []*envelope) float64 {
 	freqRatio := 1.0
+	qExponent := 1.0
 	for _, envelope := range envelopes {
 		if envelope.destination == "filter_freq" {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
+		if envelope.destination == "filter_q" {
+			qExponent *= envelope.value
+		}
 	}
-	f.a, f.b = makeH(f.a, f.b, p, freqRatio)
+	f.a, f.b = makeH(f.a, f.b, p, freqRatio, qExponent)
 	pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
 	if len(f.past) < pastLength {
 		f.past = make([]float64, pastLength)
 	}
 	return calcFilterOneSample(in, f.a, f.b, f.past)
 }
-func makeH(feedforward []float64, feedback []float64, f *filterParams, freqRatio float64) ([]float64, []float64) {
+func makeH(feedforward []float64, feedback []float64, f *filterParams, freqRatio float64, qExponent float64) ([]float64, []float64) {
 	fc := f.freq * freqRatio / sampleRate
+	q := math.Pow(f.q, qExponent)
 	switch f.kind {
 	case "lowpass-fir":
 		return makeFIRLowpassH(feedforward, feedback, f.N, fc, hamming)
 	case "highpass-fir":
 		return makeFIRHighpassH(feedforward, feedback, f.N, fc, hamming)
 	case "lowpass":
-		return makeBiquadLowpassH(feedforward, feedback, fc, f.q)
+		return makeBiquadLowpassH(feedforward, feedback, fc, q)
 	case "highpass":
-		return makeBiquadHighpassH(feedforward, feedback, fc, f.q)
+		return makeBiquadHighpassH(feedforward, feedback, fc, q)
 	case "bandpass-1":
-		return makeBiquadBandpass1H(feedforward, feedback, fc, f.q)
+		return makeBiquadBandpass1H(feedforward, feedback, fc, q)
 	case "bandpass-2":
-		return makeBiquadBandpass2H(feedforward, feedback, fc, f.q)
+		return makeBiquadBandpass2H(feedforward, feedback, fc, q)
 	case "notch":
-		return makeBiquadNotchH(feedforward, feedback, fc, f.q)
+		return makeBiquadNotchH(feedforward, feedback, fc, q)
 	case "peaking":
-		return makeBiquadPeakingEQH(feedforward, feedback, fc, f.q, f.gain)
+		return makeBiquadPeakingEQH(feedforward, feedback, fc, q, f.gain)
 	case "lowshelf":
-		return makeBiquadLowShelfH(feedforward, feedback, fc, f.q, f.gain)
+		return makeBiquadLowShelfH(feedforward, feedback, fc, q, f.gain)
 	case "highshelf":
-		return makeBiquadHighShelfH(feedforward, feedback, fc, f.q, f.gain)
+		return makeBiquadHighShelfH(feedforward, feedback, fc, q, f.gain)
 	case "none":
 		fallthrough
 	default:
@@ -891,6 +899,33 @@ func (l *envelopeParams) set(key string, value string) error {
 	return nil
 }
 
+/*
+  [value-to-zero] filter_q, etc.
+  v +_
+	  | \_
+    |   \_
+    |     \_
+  0 +-------+---------
+    |attack |
+
+  [amount-to-value] freq, filter_freq, etc.
+  a +_
+	  | \_
+    |   \_
+    |     \_
+  v +       `-----
+	  |
+		+--------+--------
+    |attack  |
+
+  [zero-to-value] vibrato, tremolo, etc.
+  v +           ,-----
+	  |         _/
+    |       _/
+    |      /
+  0 +-----+------+----
+    |delay|attack|
+*/
 type envelope struct {
 	*adsr
 	destination string
@@ -1420,7 +1455,7 @@ var filterShapeFeedback = []float64{}
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0)
+	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0, 1.0)
 	a.state.Unlock()
 	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
 }

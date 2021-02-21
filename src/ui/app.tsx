@@ -516,6 +516,11 @@ envelopeDestinations.set("filter_freq", {
   maxDelay: 0,
   defaultDelay: 0,
 });
+envelopeDestinations.set("filter_q", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
 for (let i = 0; i < 3; i++) {
   envelopeDestinations.set(`lfo${i}_amount`, {
     minDelay: 0,
