@@ -718,10 +718,30 @@ func setTargetAtTime(initialValue float64, targetValue float64, pos float64) flo
 	return targetValue + (initialValue-targetValue)*math.Exp(-pos)
 }
 
+// ----- Filter Kind ----- //
+
+/*
+generate-enum filterKind
+
+filterNone none
+filterLowPassFIR lowpass-fir
+filterHighPassFIR highpass-fir
+filterLowPass lowpass
+filterHighPass highpass
+filterBandPass1 bandpass-1
+filterBandPass2 bandpass-2
+filterNotch notch
+filterPeaking peaking
+filterLowShelf lowshelf
+filterHighShelf highshelf
+
+EOF
+*/
+
 // ----- Filter ----- //
 
 type filterParams struct {
-	kind string
+	kind int
 	freq float64
 	q    float64
 	gain float64
@@ -741,14 +761,14 @@ func (f *filterParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to filter")
 		return
 	}
-	f.kind = j.Kind
+	f.kind = filterKindFromString(j.Kind)
 	f.freq = j.Freq
 	f.q = j.Q
 	f.gain = j.Gain
 }
 func (f *filterParams) toJSON() json.RawMessage {
 	return toRawMessage(&filterJSON{
-		Kind: f.kind,
+		Kind: filterKindToString(f.kind),
 		Freq: f.freq,
 		Q:    f.q,
 		Gain: f.gain,
@@ -757,7 +777,7 @@ func (f *filterParams) toJSON() json.RawMessage {
 func (f *filterParams) set(key string, value string) error {
 	switch key {
 	case "kind":
-		f.kind = value
+		f.kind = filterKindFromString(value)
 	case "freq":
 		freq, err := strconv.ParseFloat(value, 64)
 		if err != nil {
@@ -822,27 +842,27 @@ func makeH(
 	q := math.Pow(f.q, qExponent)
 	gain := f.gain * gainRatio
 	switch f.kind {
-	case "lowpass-fir":
+	case filterLowPassFIR:
 		return makeFIRLowpassH(feedforward, feedback, f.N, fc, hamming)
-	case "highpass-fir":
+	case filterHighPassFIR:
 		return makeFIRHighpassH(feedforward, feedback, f.N, fc, hamming)
-	case "lowpass":
+	case filterLowPass:
 		return makeBiquadLowpassH(feedforward, feedback, fc, q)
-	case "highpass":
+	case filterHighPass:
 		return makeBiquadHighpassH(feedforward, feedback, fc, q)
-	case "bandpass-1":
+	case filterBandPass1:
 		return makeBiquadBandpass1H(feedforward, feedback, fc, q)
-	case "bandpass-2":
+	case filterBandPass2:
 		return makeBiquadBandpass2H(feedforward, feedback, fc, q)
-	case "notch":
+	case filterNotch:
 		return makeBiquadNotchH(feedforward, feedback, fc, q)
-	case "peaking":
+	case filterPeaking:
 		return makeBiquadPeakingEQH(feedforward, feedback, fc, q, gain)
-	case "lowshelf":
+	case filterLowShelf:
 		return makeBiquadLowShelfH(feedforward, feedback, fc, q, gain)
-	case "highshelf":
+	case filterHighShelf:
 		return makeBiquadHighShelfH(feedforward, feedback, fc, q, gain)
-	case "none":
+	case filterNone:
 		fallthrough
 	default:
 		return makeNoFilterH(feedforward, feedback)
@@ -1393,7 +1413,7 @@ func newState() *state {
 		oscParams:      &oscParams{kind: waveSine},
 		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
-		filterParams:   &filterParams{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
+		filterParams:   &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
 		envelopeParams: []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
 		echoParams:     &echoParams{},
 		polyMode:       false,

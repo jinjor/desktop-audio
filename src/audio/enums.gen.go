@@ -67,6 +67,75 @@ func waveKindToString(d int) string {
 }
 
 const (
+	filterNone = iota
+	filterLowPassFIR
+	filterHighPassFIR
+	filterLowPass
+	filterHighPass
+	filterBandPass1
+	filterBandPass2
+	filterNotch
+	filterPeaking
+	filterLowShelf
+	filterHighShelf
+)
+
+func filterKindFromString(s string) int {
+	switch s {
+	case "none":
+		return filterNone
+	case "lowpass-fir":
+		return filterLowPassFIR
+	case "highpass-fir":
+		return filterHighPassFIR
+	case "lowpass":
+		return filterLowPass
+	case "highpass":
+		return filterHighPass
+	case "bandpass-1":
+		return filterBandPass1
+	case "bandpass-2":
+		return filterBandPass2
+	case "notch":
+		return filterNotch
+	case "peaking":
+		return filterPeaking
+	case "lowshelf":
+		return filterLowShelf
+	case "highshelf":
+		return filterHighShelf
+	}
+	return filterNone
+}
+func filterKindToString(d int) string {
+	switch d {
+	case filterNone:
+		return "none"
+	case filterLowPassFIR:
+		return "lowpass-fir"
+	case filterHighPassFIR:
+		return "highpass-fir"
+	case filterLowPass:
+		return "lowpass"
+	case filterHighPass:
+		return "highpass"
+	case filterBandPass1:
+		return "bandpass-1"
+	case filterBandPass2:
+		return "bandpass-2"
+	case filterNotch:
+		return "notch"
+	case filterPeaking:
+		return "peaking"
+	case filterLowShelf:
+		return "lowshelf"
+	case filterHighShelf:
+		return "highshelf"
+	}
+	return "none"
+}
+
+const (
 	destNone = iota
 	destVibrato
 	destTremolo
