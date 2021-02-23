@@ -265,12 +265,11 @@ type decoratedOsc struct {
 	envelopes []*envelope
 }
 
-const enumNoEvent = 0
-const enumNoteOn = 1
-const enumNoteOff = 2
-
-var lfoFreqKey = [3]string{"lfo0_freq", "lfo1_freq", "lfo2_freq"}
-var lfoAmountKey = [3]string{"lfo0_amount", "lfo1_amount", "lfo2_amount"}
+const (
+	enumNoEvent = iota
+	enumNoteOn
+	enumNoteOff
+)
 
 func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	switch event {
@@ -298,10 +297,10 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		amountGain := 1.0
 		lfoFreqRatio := 1.0
 		for _, envelope := range o.envelopes {
-			if envelope.destination == lfoAmountKey[lfoIndex] {
+			if envelope.destination == destLfoAmount[lfoIndex] {
 				amountGain *= envelope.value
 			}
-			if envelope.destination == lfoFreqKey[lfoIndex] {
+			if envelope.destination == destLfoFreq[lfoIndex] {
 				lfoFreqRatio *= math.Pow(16.0, envelope.value)
 			}
 		}
@@ -312,7 +311,7 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		filterFreqRatio *= _filterFreqRatio
 	}
 	for _, envelope := range o.envelopes {
-		if envelope.destination == "freq" {
+		if envelope.destination == destFreq {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
 	}
@@ -580,26 +579,26 @@ func (a *adsr) setParams(p *adsrParams) {
 	a.release = p.release
 }
 func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
-	if p.destination == "vibrato" ||
-		p.destination == "tremolo" ||
-		p.destination == "filter_q_0v" ||
-		p.destination == "filter_gain_0v" ||
-		p.destination == "lfo0_amount" ||
-		p.destination == "lfo1_amount" ||
-		p.destination == "lfo2_amount" {
+	if p.destination == destVibrato ||
+		p.destination == destTremolo ||
+		p.destination == destFilterQ0V ||
+		p.destination == destFilterGain0V ||
+		p.destination == destLfo0Amount ||
+		p.destination == destLfo1Amount ||
+		p.destination == destLfo2Amount {
 		// zero-to-value
 		a.base = 1
 		a.peek = 0
-	} else if p.destination == "freq" ||
-		p.destination == "filter_freq" ||
-		p.destination == "lfo0_freq" ||
-		p.destination == "lfo1_freq" ||
-		p.destination == "lfo2_freq" {
+	} else if p.destination == destFreq ||
+		p.destination == destFilterFreq ||
+		p.destination == destLfo0Freq ||
+		p.destination == destLfo1Freq ||
+		p.destination == destLfo2Freq {
 		// amount-to-value
 		a.base = 0
 		a.peek = p.amount
-	} else if p.destination == "filter_q" ||
-		p.destination == "filter_gain" {
+	} else if p.destination == destFilterQ ||
+		p.destination == destFilterGain {
 		// value-to-zero
 		a.base = 0
 		a.peek = 1
@@ -766,13 +765,13 @@ func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64
 	qExponent := 1.0
 	gainRatio := 1.0
 	for _, envelope := range envelopes {
-		if envelope.destination == "filter_freq" {
+		if envelope.destination == destFilterFreq {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
-		if envelope.destination == "filter_q" || envelope.destination == "filter_q_0v" {
+		if envelope.destination == destFilterQ || envelope.destination == destFilterQ0V {
 			qExponent *= envelope.value
 		}
-		if envelope.destination == "filter_gain" || envelope.destination == "filter_gain_0v" {
+		if envelope.destination == destFilterGain || envelope.destination == destFilterGain0V {
 			gainRatio *= envelope.value
 		}
 	}
@@ -966,10 +965,95 @@ func (e *echo) step(in float64) float64 {
 	return in + delayed*e.mix
 }
 
+// ----- Destination ----- //
+
+const (
+	destNone = iota
+	destVibrato
+	destTremolo
+	destFM
+	destPM
+	destAM
+	destFreq
+	destFilterFreq
+	destFilterQ
+	destFilterQ0V
+	destFilterGain
+	destFilterGain0V
+	destLfo0Freq
+	destLfo1Freq
+	destLfo2Freq
+	destLfo0Amount
+	destLfo1Amount
+	destLfo2Amount
+)
+
+var destLfoFreq = [3]int{destLfo0Freq, destLfo1Freq, destLfo2Freq}
+var destLfoAmount = [3]int{destLfo0Amount, destLfo1Amount, destLfo2Amount}
+
+func destinationFromString(s string) int {
+	switch s {
+	case "none":
+		return destNone
+	case "vibrato":
+		return destVibrato
+	case "tremolo":
+		return destTremolo
+	case "fm":
+		return destFM
+	case "pm":
+		return destPM
+	case "am":
+		return destAM
+	case "freq":
+		return destFreq
+	case "filter_freq":
+		return destFilterFreq
+	case "filter_q":
+		return destFilterQ
+	case "filter_q_0v":
+		return destFilterQ0V
+	case "filter_gain":
+		return destFilterGain
+	case "fitler_gain_0v":
+		return destFilterGain0V
+	}
+	return destNone
+}
+func destinationToString(d int) string {
+	switch d {
+	case destNone:
+		return "none"
+	case destVibrato:
+		return "vibrato"
+	case destTremolo:
+		return "tremolo"
+	case destFM:
+		return "fm"
+	case destPM:
+		return "pm"
+	case destAM:
+		return "am"
+	case destFreq:
+		return "freq"
+	case destFilterFreq:
+		return "filter_freq"
+	case destFilterQ:
+		return "filter_q"
+	case destFilterQ0V:
+		return "filter_q_0v"
+	case destFilterGain:
+		return "filter_gain"
+	case destFilterGain0V:
+		return "filter_gain_0v"
+	}
+	return "none"
+}
+
 // ----- Envelope ----- //
 
 type envelopeParams struct {
-	destination string
+	destination int
 	delay       float64
 	attack      float64
 	amount      float64
@@ -989,14 +1073,14 @@ func (l *envelopeParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to envelopeParams")
 		return
 	}
-	l.destination = j.Destination
+	l.destination = destinationFromString(j.Destination)
 	l.delay = j.Delay
 	l.attack = j.Attack
 	l.amount = j.Amount
 }
 func (l *envelopeParams) toJSON() json.RawMessage {
 	return toRawMessage(&envelopeJSON{
-		Destination: l.destination,
+		Destination: destinationToString(l.destination),
 		Delay:       l.delay,
 		Attack:      l.attack,
 		Amount:      l.amount,
@@ -1004,7 +1088,7 @@ func (l *envelopeParams) toJSON() json.RawMessage {
 }
 func newEnvelopeParams() *envelopeParams {
 	return &envelopeParams{
-		destination: "none",
+		destination: destNone,
 		delay:       0,
 		attack:      0,
 		amount:      0,
@@ -1013,7 +1097,7 @@ func newEnvelopeParams() *envelopeParams {
 func (l *envelopeParams) set(key string, value string) error {
 	switch key {
 	case "destination":
-		l.destination = value
+		l.destination = destinationFromString(value)
 	case "delay":
 		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
@@ -1065,12 +1149,12 @@ func (l *envelopeParams) set(key string, value string) error {
 */
 type envelope struct {
 	*adsr
-	destination string
+	destination int
 }
 
 func newEnvelope() *envelope {
 	return &envelope{
-		destination: "none",
+		destination: destNone,
 		adsr:        &adsr{},
 	}
 }
@@ -1078,7 +1162,7 @@ func newEnvelope() *envelope {
 // ----- LFO ----- //
 
 type lfoParams struct {
-	destination string
+	destination int
 	wave        string
 	freqType    string
 	freq        float64
@@ -1100,7 +1184,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to adsrParams")
 		return
 	}
-	l.destination = j.Destination
+	l.destination = destinationFromString(j.Destination)
 	l.wave = j.Wave
 	l.freqType = j.FreqType
 	l.freq = j.Freq
@@ -1108,7 +1192,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 }
 func (l *lfoParams) toJSON() json.RawMessage {
 	return toRawMessage(&lfoJSON{
-		Destination: l.destination,
+		Destination: destinationToString(l.destination),
 		Wave:        l.wave,
 		FreqType:    l.freqType,
 		Freq:        l.freq,
@@ -1118,7 +1202,7 @@ func (l *lfoParams) toJSON() json.RawMessage {
 
 func newLfoParams() *lfoParams {
 	return &lfoParams{
-		destination: "none",
+		destination: destNone,
 		wave:        "sine",
 		freqType:    "none",
 		freq:        0,
@@ -1144,7 +1228,7 @@ func (l *lfoParams) set(key string, value string) error {
 	switch key {
 	case "destination":
 		// l.initByDestination(value)
-		l.destination = value
+		l.destination = destinationFromString(value)
 	case "wave":
 		l.wave = value
 	case "freq":
@@ -1164,7 +1248,7 @@ func (l *lfoParams) set(key string, value string) error {
 }
 
 type lfo struct {
-	destination string
+	destination int
 	freqType    string
 	amount      float64
 	osc         *osc
@@ -1172,7 +1256,7 @@ type lfo struct {
 
 func newLfo() *lfo {
 	return &lfo{
-		destination: "none",
+		destination: destNone,
 		freqType:    "none",
 		amount:      0,
 		osc:         &osc{phase01: rand.Float64()},
@@ -1193,22 +1277,22 @@ func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float
 	ampRatio := 1.0
 	filterFreqRatio := 1.0
 	switch l.destination {
-	case "vibrato":
+	case destVibrato:
 		amount := l.amount * amountGain
 		freqRatio = math.Pow(2.0, l.osc.step(lfoFreqRatio, 0.0)*amount/100.0/12.0)
-	case "tremolo":
+	case destTremolo:
 		amount := l.amount * amountGain
 		ampRatio = 1.0 + (l.osc.step(lfoFreqRatio, 0.0)-1.0)/2.0*amount
-	case "fm":
+	case destFM:
 		amount := l.amount * amountGain
 		freqRatio = math.Pow(2.0, l.osc.step(career.freq*lfoFreqRatio, 0.0)*amount/100/12)
-	case "pm":
+	case destPM:
 		amount := l.amount * amountGain
 		phaseShift = l.osc.step(career.freq*lfoFreqRatio, 0.0) * amount
-	case "am":
+	case destAM:
 		amount := l.amount * amountGain
 		ampRatio = 1.0 + l.osc.step(career.freq*lfoFreqRatio, 0.0)*amount
-	case "filter_freq":
+	case destFilterFreq:
 		amount := l.amount * amountGain
 		filterFreqRatio = math.Pow(16.0, l.osc.step(lfoFreqRatio, 0.0)*amount)
 	}
