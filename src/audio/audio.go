@@ -246,7 +246,7 @@ func (p *polyOsc) calc(
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
-			if o.adsr.phase == "" {
+			if o.adsr.phase == phaseNone {
 				p.active = append(p.active[:j], p.active[j+1:]...)
 				p.pooled = append(p.pooled, o)
 			}
@@ -491,6 +491,15 @@ EOF
 
 // ----- ADSR ----- //
 
+const (
+	phaseNone = iota
+	phaseAttack
+	phaseKeep
+	phaseDecay
+	phaseSustain
+	phaseRelease
+)
+
 type adsrParams struct {
 	attack  float64 // ms
 	decay   float64 // ms
@@ -573,7 +582,7 @@ type adsr struct {
 	base           float64 // 0-1
 	peek           float64 // 0-1
 	value          float64
-	phase          string // "attack", "keep", "decay", "sustain", "release" nil
+	phase          int // "attack", "keep", "decay", "sustain", "release" nil
 	phasePos       int
 	valueAtNoteOn  float64
 	valueAtNoteOff float64
@@ -582,7 +591,7 @@ type adsr struct {
 func (a *adsr) init(p *adsrParams) {
 	a.setParams(p)
 	a.value = 0
-	a.phase = ""
+	a.phase = phaseNone
 	a.phasePos = 0
 	a.valueAtNoteOn = 0
 	a.valueAtNoteOff = 0
@@ -630,13 +639,13 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 }
 
 func (a *adsr) noteOn() {
-	a.phase = "attack"
+	a.phase = phaseAttack
 	a.phasePos = 0
 	a.valueAtNoteOn = a.value
 }
 
 func (a *adsr) noteOff() {
-	a.phase = "release"
+	a.phase = phaseRelease
 	a.phasePos = 0
 	a.valueAtNoteOff = a.value
 }
@@ -644,9 +653,9 @@ func (a *adsr) noteOff() {
 func (a *adsr) step() {
 	phaseTime := float64(a.phasePos) * secPerSample * 1000 // ms
 	switch a.phase {
-	case "attack":
+	case phaseAttack:
 		if phaseTime >= float64(a.attack) {
-			a.phase = "keep"
+			a.phase = phaseKeep
 			a.phasePos = 0
 			a.value = a.peek
 		} else {
@@ -654,14 +663,14 @@ func (a *adsr) step() {
 			a.value = t*a.peek + (1-t)*a.valueAtNoteOn // TODO: don't use the same attack time
 			a.phasePos++
 		}
-	case "keep":
+	case phaseKeep:
 		if phaseTime >= float64(a.keep) {
-			a.phase = "decay"
+			a.phase = phaseDecay
 			a.phasePos = 0
 		} else {
 			a.phasePos++
 		}
-	case "decay":
+	case phaseDecay:
 		ended := false
 		if a.decay == 0 {
 			ended = true
@@ -673,15 +682,15 @@ func (a *adsr) step() {
 			}
 		}
 		if ended {
-			a.phase = "sustain"
+			a.phase = phaseSustain
 			a.phasePos = 0
 			a.value = float64(a.sustain)
 		} else {
 			a.phasePos++
 		}
-	case "sustain":
+	case phaseSustain:
 		a.value = float64(a.sustain)
-	case "release":
+	case phaseRelease:
 		ended := false
 		if a.release == 0 {
 			ended = true
@@ -693,7 +702,7 @@ func (a *adsr) step() {
 			}
 		}
 		if ended {
-			a.phase = ""
+			a.phase = phaseNone
 			a.phasePos = 0
 			a.value = a.base
 		} else {
