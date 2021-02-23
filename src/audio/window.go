@@ -14,13 +14,13 @@ func applyWindow(data []float64, windowFunc func(float64) float64) {
 }
 
 func han(x float64) float64 {
-	return 0.5 - 0.5*math.Cos(2.0*math.Pi*x)
+	return 0.5 - 0.5*math.Cos(twoPi*x)
 }
 
 func blackman(x float64) float64 {
-	return 0.42 - 0.5*math.Cos(2.0*math.Pi*x) + 0.08*math.Cos(4.0*math.Pi*x)
+	return 0.42 - 0.5*math.Cos(twoPi*x) + 0.08*math.Cos(4.0*math.Pi*x)
 }
 
 func hamming(x float64) float64 {
-	return 0.54 - 0.46*math.Cos(2.0*math.Pi*x)
+	return 0.54 - 0.46*math.Cos(twoPi*x)
 }

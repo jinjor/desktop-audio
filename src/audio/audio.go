@@ -29,6 +29,7 @@ const secPerSample = 1.0 / sampleRate
 const responseDelay = secPerSample * samplesPerCycle
 const baseFreq = 442.0
 const oscGain = 0.07
+const twoPi = math.Pi * 2.0
 
 var fft = NewFFT(fftSize, false)
 
@@ -421,11 +422,11 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 }
 func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 	freq := o.freq * freqRatio
-	p := positiveMod(o.phase01+phaseShift/(2.0*math.Pi), 1)
+	p := positiveMod(o.phase01+phaseShift/twoPi, 1)
 	value := 0.0
 	switch o.kind {
 	case "sine":
-		value = math.Sin(2 * math.Pi * p)
+		value = math.Sin(twoPi * p)
 	case "triangle":
 		if p < 0.5 {
 			value = p*4 - 1
@@ -440,7 +441,7 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 		}
 	case "square-wt":
 		note := freqToNote(freq)
-		value = blsquareWT.tables[note].getAtPhase(2.0 * math.Pi * p)
+		value = blsquareWT.tables[note].getAtPhase(twoPi * p)
 	case "pulse":
 		if p < 0.25 {
 			value = 1
@@ -451,7 +452,7 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 		value = p*2 - 1
 	case "saw-wt":
 		note := freqToNote(freq)
-		value = blsawWT.tables[note].getAtPhase(2.0 * math.Pi * p)
+		value = blsawWT.tables[note].getAtPhase(twoPi * p)
 	case "saw-rev":
 		value = p*(-2) + 1
 	case "noise":

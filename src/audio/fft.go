@@ -2,7 +2,6 @@ package audio
 
 import (
 	"log"
-	"math"
 	"math/cmplx"
 )
 
@@ -37,7 +36,7 @@ func bitReverse(k, n int) int {
 }
 func makeWTable(n int) []complex128 {
 	array := make([]complex128, n)
-	w := -2.0 * math.Pi / float64(n)
+	w := -twoPi / float64(n)
 	for i := 0; i < n; i++ {
 		array[i] = cmplx.Exp(complex(0, w*float64(i)))
 	}
