@@ -1,10 +1,11 @@
-//go:generate sh -c "go run . > ../audio/enums.gen.go"
-//go:generate gofmt -w ../audio/enums.gen.go
-
 package main
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
+	"go/format"
+	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
@@ -23,9 +24,11 @@ type EnumValue struct {
 }
 
 func main() {
+	src := os.Getenv("GOFILE")
+	dest := os.Args[2]
+	fmt.Println("generating " + dest + " needed by " + src + " ...")
 
-	fileName := "../audio/audio.go"
-	file, err := os.Open(fileName)
+	file, err := os.Open(src)
 	if err != nil {
 		panic(err)
 	}
@@ -68,10 +71,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = tmpl.Execute(os.Stdout, variables)
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, variables)
 	if err != nil {
 		panic(err)
 	}
+
+	code, err := format.Source(buf.Bytes())
+	if err != nil {
+		panic(err)
+	}
+	ioutil.WriteFile(dest, code, 0666)
+
+	fmt.Println("done.")
 }
 
 const fileTemplate = `

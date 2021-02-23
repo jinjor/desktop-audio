@@ -1,3 +1,5 @@
+//go:generate go run ../gen/main.go -- enums.gen.go
+
 package audio
 
 import (
