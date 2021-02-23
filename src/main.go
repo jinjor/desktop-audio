@@ -166,6 +166,7 @@ func parseCommand(line string) ([]string, error) {
 func sendReports(ctx context.Context, conn net.Conn, audio *audio.Audio) error {
 	t := time.NewTicker(time.Second / 60)
 	defer t.Stop()
+	count := 0
 loop:
 	for {
 		audio.Changes.Add("fft") // always exists
@@ -174,10 +175,16 @@ loop:
 			log.Println("sendReports() interrupted")
 			break loop
 		case _ = <-t.C:
+			count++
 			if audio.Changes.Has("all_params") {
 				audio.Changes.Delete("all_params")
-				j := audio.ToJSON()
+				j := audio.GetParamsJSON()
 				s := "all_params " + url.QueryEscape(string(j))
+				conn.Write([]byte(s + "\n"))
+			}
+			if count%15 == 0 {
+				j := audio.GetStatusJSON()
+				s := "status " + url.QueryEscape(string(j))
 				conn.Write([]byte(s + "\n"))
 			}
 			if audio.Changes.Has("fft") {

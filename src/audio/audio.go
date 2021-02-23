@@ -1264,6 +1264,7 @@ type state struct {
 	pos            int64
 	out            []float64 // length: fftSize
 	lastRead       float64
+	processTime    float64
 }
 type stateJSON struct {
 	Poly      string            `json:"poly"`
@@ -1384,7 +1385,7 @@ func (a *Audio) ApplyJSON(data []byte) {
 func (a *Audio) ToJSON() []byte {
 	a.state.Lock()
 	defer a.state.Unlock()
-	bytes, err := json.Marshal(a.toJSON())
+	bytes, err := json.Marshal(a.state.toJSON())
 	if err != nil {
 		panic(err)
 	}
@@ -1429,11 +1430,11 @@ func (a *Audio) Read(buf []byte) (int, error) {
 			a.state.events[i] = nil
 		}
 		endTime := now()
-		duration := endTime - timestamp
-		if duration > responseDelay {
-			log.Println("[WARN] time budget exceeded:", fmt.Sprint(int(duration*1000))+"ms")
+		a.state.processTime = endTime - timestamp
+		if a.state.processTime > responseDelay {
+			log.Println("[WARN] time budget exceeded:", fmt.Sprint(int(a.state.processTime*1000))+"ms")
 		} else {
-			// log.Println(fmt.Sprint(int(duration*1000)) + "ms")
+			// log.Println(fmt.Sprint(int(processTime*1000)) + "ms")
 		}
 		return len(buf), nil // io.EOF, etc.
 	}
@@ -1615,6 +1616,17 @@ func (a *Audio) Start(ctx context.Context) error {
 	return nil
 }
 
+// GetParamsJSON ...
+func (a *Audio) GetParamsJSON() []byte {
+	a.state.Lock()
+	defer a.state.Unlock()
+	bytes, err := json.Marshal(a.state.toJSON())
+	if err != nil {
+		panic(err)
+	}
+	return bytes
+}
+
 var filterShapeFeedforward = []float64{}
 var filterShapeFeedback = []float64{}
 
@@ -1624,6 +1636,26 @@ func (a *Audio) GetFilterShape() []float64 {
 	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0, 1.0, 1.0)
 	a.state.Unlock()
 	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
+}
+
+type statusJSON struct {
+	Polyphony   int     `json:"polyphony"`
+	ProcessTime float64 `json:"processTime"`
+}
+
+// GetStatusJSON ...
+func (a *Audio) GetStatusJSON() []byte {
+	a.state.Lock()
+	statusJSON := &statusJSON{
+		Polyphony:   len(a.state.polyOsc.active),
+		ProcessTime: a.state.processTime,
+	}
+	a.state.Unlock()
+	bytes, err := json.Marshal(statusJSON)
+	if err != nil {
+		panic(err)
+	}
+	return bytes
 }
 
 // GetFFT ...

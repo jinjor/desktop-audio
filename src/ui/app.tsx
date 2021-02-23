@@ -27,7 +27,7 @@ const EditGroup = (o: { label: string; children: any }) => {
 };
 
 const Poly = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: string }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
     const onChange = (value: string) =>
       o.dispatch({ type: "changedPoly", value });
     return (
@@ -36,7 +36,7 @@ const Poly = React.memo(
   }
 );
 const GlideTime = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedGlideTime", value });
     const min = 1;
@@ -58,7 +58,7 @@ const GlideTime = React.memo(
 );
 
 const OscKind = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: string }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
     const onChange = (value: string) =>
       o.dispatch({ type: "changedOscKind", value });
     return (
@@ -81,7 +81,7 @@ const OscKind = React.memo(
   }
 );
 const Octave = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedOscOctave", value });
     const min = -2;
@@ -102,7 +102,7 @@ const Octave = React.memo(
   }
 );
 const Coarse = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedOscCoarse", value });
     const min = -12;
@@ -123,7 +123,7 @@ const Coarse = React.memo(
   }
 );
 const Fine = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedOscFine", value });
     const min = -100;
@@ -144,7 +144,7 @@ const Fine = React.memo(
   }
 );
 const Attack = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedAdsrAttack", value });
     return (
@@ -161,7 +161,7 @@ const Attack = React.memo(
   }
 );
 const Decay = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedAdsrDecay", value });
     return (
@@ -178,7 +178,7 @@ const Decay = React.memo(
   }
 );
 const Sustain = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedAdsrSustain", value });
     return (
@@ -195,7 +195,7 @@ const Sustain = React.memo(
   }
 );
 const Release = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedAdsrRelease", value });
     return (
@@ -212,7 +212,7 @@ const Release = React.memo(
   }
 );
 const FilterKind = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: string }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
     const onChange = (value: string) =>
       o.dispatch({ type: "changedFilterKind", value });
     return (
@@ -237,7 +237,7 @@ const FilterKind = React.memo(
   }
 );
 const FilterFreq = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedFilterFreq", value });
     return (
@@ -254,7 +254,7 @@ const FilterFreq = React.memo(
   }
 );
 const FilterQ = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedFilterQ", value });
     return (
@@ -271,7 +271,7 @@ const FilterQ = React.memo(
   }
 );
 const FilterGain = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedFilterGain", value });
     return (
@@ -389,7 +389,11 @@ const useCallbackWithIndex = <T,>(
   return useCallback((value: T) => f(index, value), [index, f]);
 };
 const LFOGroup = React.memo(
-  (o: { index: number; value: LFO; dispatch: React.Dispatch<Action> }) => {
+  (o: {
+    index: number;
+    value: LFO;
+    dispatch: React.Dispatch<ParamsAction>;
+  }) => {
     const list = [...lfoDestinations.keys()];
     const destination = lfoDestinations.get(o.value.destination)!;
     const onChangeDestination = useCallbackWithIndex(
@@ -573,7 +577,11 @@ const defaultEnvelope: Envelope = {
   amount: 0,
 };
 const EnvelopeGroup = React.memo(
-  (o: { index: number; value: Envelope; dispatch: React.Dispatch<Action> }) => {
+  (o: {
+    index: number;
+    value: Envelope;
+    dispatch: React.Dispatch<ParamsAction>;
+  }) => {
     const list = [...envelopeDestinations.keys()];
     const destination = envelopeDestinations.get(o.value.destination)!;
     const onChangeDestination = useCallbackWithIndex(
@@ -668,7 +676,7 @@ const EnvelopeAmount = React.memo(
   }
 );
 const EchoDelay = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedEchoDelay", value });
     return (
@@ -685,7 +693,7 @@ const EchoDelay = React.memo(
   }
 );
 const EchoFeedbackGain = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedEchoFeedbackGain", value });
     return (
@@ -702,7 +710,7 @@ const EchoFeedbackGain = React.memo(
   }
 );
 const EchoMix = React.memo(
-  (o: { dispatch: React.Dispatch<Action>; value: number }) => {
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
     const onChange = (value: number) =>
       o.dispatch({ type: "changedEchoMix", value });
     return (
@@ -817,7 +825,7 @@ const setItem = <T,>(array: T[], index: number, updates: Partial<T>): T[] => {
   return array.map((item, i) => (i === index ? { ...item, ...updates } : item));
 };
 
-const stateDecoder = d.object({
+const paramsDecoder = d.object({
   poly: d.string(),
   glideTime: d.number(),
   osc: d.object({
@@ -860,9 +868,21 @@ const stateDecoder = d.object({
     mix: d.number(),
   }),
 });
+const statusDecoder = d.object({
+  polyphony: d.number(),
+  processTime: d.number(),
+});
+const stateDecoder = d.object({
+  params: paramsDecoder,
+  status: statusDecoder,
+});
+type Params = d.TypeOf<typeof paramsDecoder>;
 type State = d.TypeOf<typeof stateDecoder>;
+
 type Action =
   | { type: "receivedCommand"; command: string[] }
+  | { type: "paramsAction"; value: ParamsAction };
+type ParamsAction =
   | { type: "changedPoly"; value: string }
   | { type: "changedGlideTime"; value: number }
   | { type: "changedOscKind"; value: string }
@@ -891,46 +911,42 @@ type Action =
 
 const App = () => {
   const initialState: State = {
-    poly: "mono",
-    glideTime: 100,
-    osc: {
-      kind: "sine",
-      octave: 0,
-      coarse: 0,
-      fine: 0,
+    params: {
+      poly: "mono",
+      glideTime: 100,
+      osc: {
+        kind: "sine",
+        octave: 0,
+        coarse: 0,
+        fine: 0,
+      },
+      adsr: {
+        attack: 0,
+        decay: 100,
+        sustain: 0.7,
+        release: 100,
+      },
+      filter: {
+        kind: "none",
+        freq: 1000,
+        q: 0,
+        gain: 0,
+      },
+      lfos: [defaultLFO, defaultLFO, defaultLFO],
+      envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],
+      echo: {
+        delay: 100,
+        feedbackGain: 0,
+        mix: 0,
+      },
     },
-    adsr: {
-      attack: 0,
-      decay: 100,
-      sustain: 0.7,
-      release: 100,
-    },
-    filter: {
-      kind: "none",
-      freq: 1000,
-      q: 0,
-      gain: 0,
-    },
-    lfos: [defaultLFO, defaultLFO, defaultLFO],
-    envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],
-    echo: {
-      delay: 100,
-      feedbackGain: 0,
-      mix: 0,
+    status: {
+      polyphony: 0,
+      processTime: 0,
     },
   };
-  const [state, dispatch] = useReducer((state: State, action: Action) => {
+  const paramsReducer = (state: Params, action: ParamsAction) => {
     switch (action.type) {
-      case "receivedCommand": {
-        const { command } = action;
-        if (command[0] === "all_params") {
-          const obj = JSON.parse(command[1]);
-          console.log(obj);
-          return stateDecoder.run(obj.state);
-        } else {
-          return state;
-        }
-      }
       case "changedPoly": {
         const { value } = action;
         ipcRenderer.send("audio", [value]);
@@ -1165,6 +1181,28 @@ const App = () => {
         };
       }
     }
+  };
+  const [state, dispatch] = useReducer((state: State, action: Action) => {
+    switch (action.type) {
+      case "receivedCommand": {
+        const { command } = action;
+        if (command[0] === "all_params") {
+          const obj = JSON.parse(command[1]);
+          console.log(obj);
+          return { ...state, params: paramsDecoder.run(obj) };
+        }
+        if (command[0] === "status") {
+          const obj = JSON.parse(command[1]);
+          return { ...state, status: statusDecoder.run(obj) };
+        } else {
+          return state;
+        }
+      }
+      case "paramsAction": {
+        const { value } = action;
+        return { ...state, params: paramsReducer(state.params, value) };
+      }
+    }
   }, initialState);
   useEffect(() => {
     const callback = (_: any, command: string[]) => {
@@ -1175,76 +1213,91 @@ const App = () => {
       ipcRenderer.off("audio", callback);
     };
   }, []);
+  const dispatchParam: React.Dispatch<ParamsAction> = (
+    action: ParamsAction
+  ) => {
+    dispatch({
+      type: "paramsAction",
+      value: action,
+    });
+  };
+  const p = state.params;
+  const processTimeLimit = 0.0213; // TODO: get this from server
   return (
     <React.Fragment>
       <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
         <EditGroup label="POLY">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <Poly value={state.poly} dispatch={dispatch} />
-            <GlideTime value={state.glideTime} dispatch={dispatch} />
+            <Poly value={p.poly} dispatch={dispatchParam} />
+            <GlideTime value={p.glideTime} dispatch={dispatchParam} />
           </div>
         </EditGroup>
         <EditGroup label="OSC">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
             <div style={{ textAlign: "center" }}>
-              <OscKind value={state.osc.kind} dispatch={dispatch} />
+              <OscKind value={p.osc.kind} dispatch={dispatchParam} />
             </div>
-            <Octave value={state.osc.octave} dispatch={dispatch} />
-            <Coarse value={state.osc.coarse} dispatch={dispatch} />
-            <Fine value={state.osc.fine} dispatch={dispatch} />
+            <Octave value={p.osc.octave} dispatch={dispatchParam} />
+            <Coarse value={p.osc.coarse} dispatch={dispatchParam} />
+            <Fine value={p.osc.fine} dispatch={dispatchParam} />
           </div>
         </EditGroup>
         <EditGroup label="Envelope">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <Attack value={state.adsr.attack} dispatch={dispatch} />
-            <Decay value={state.adsr.decay} dispatch={dispatch} />
-            <Sustain value={state.adsr.sustain} dispatch={dispatch} />
-            <Release value={state.adsr.release} dispatch={dispatch} />
+            <Attack value={p.adsr.attack} dispatch={dispatchParam} />
+            <Decay value={p.adsr.decay} dispatch={dispatchParam} />
+            <Sustain value={p.adsr.sustain} dispatch={dispatchParam} />
+            <Release value={p.adsr.release} dispatch={dispatchParam} />
           </div>
         </EditGroup>
         <EditGroup label="FILTER">
           <div style={{ display: "flex", gap: "12px" }}>
             <div>
-              <FilterKind dispatch={dispatch} value={state.filter.kind} />
+              <FilterKind dispatch={dispatchParam} value={p.filter.kind} />
             </div>
             <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-              <FilterFreq dispatch={dispatch} value={state.filter.freq} />
-              <FilterQ dispatch={dispatch} value={state.filter.q} />
-              <FilterGain dispatch={dispatch} value={state.filter.gain} />
+              <FilterFreq dispatch={dispatchParam} value={p.filter.freq} />
+              <FilterQ dispatch={dispatchParam} value={p.filter.q} />
+              <FilterGain dispatch={dispatchParam} value={p.filter.gain} />
             </div>
           </div>
         </EditGroup>
-        <LFOGroup index={0} value={state.lfos[0]} dispatch={dispatch} />
-        <LFOGroup index={1} value={state.lfos[1]} dispatch={dispatch} />
-        <LFOGroup index={2} value={state.lfos[2]} dispatch={dispatch} />
+        <LFOGroup index={0} value={p.lfos[0]} dispatch={dispatchParam} />
+        <LFOGroup index={1} value={p.lfos[1]} dispatch={dispatchParam} />
+        <LFOGroup index={2} value={p.lfos[2]} dispatch={dispatchParam} />
         <EnvelopeGroup
           index={0}
-          value={state.envelopes[0]}
-          dispatch={dispatch}
+          value={p.envelopes[0]}
+          dispatch={dispatchParam}
         />
         <EnvelopeGroup
           index={1}
-          value={state.envelopes[1]}
-          dispatch={dispatch}
+          value={p.envelopes[1]}
+          dispatch={dispatchParam}
         />
         <EnvelopeGroup
           index={2}
-          value={state.envelopes[2]}
-          dispatch={dispatch}
+          value={p.envelopes[2]}
+          dispatch={dispatchParam}
         />
         <EditGroup label="Echo">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <EchoDelay value={state.echo.delay} dispatch={dispatch} />
+            <EchoDelay value={p.echo.delay} dispatch={dispatchParam} />
             <EchoFeedbackGain
-              value={state.echo.feedbackGain}
-              dispatch={dispatch}
+              value={p.echo.feedbackGain}
+              dispatch={dispatchParam}
             />
-            <EchoMix value={state.echo.mix} dispatch={dispatch} />
+            <EchoMix value={p.echo.mix} dispatch={dispatchParam} />
           </div>
         </EditGroup>
       </div>
       <Notes />
       <Spectrum />
+      <div>Polyphony: {state.status.polyphony}</div>
+      <div>
+        Process Time: {(state.status.processTime * 1000).toFixed(2)}ms (
+        {((state.status.processTime / processTimeLimit) * 100).toFixed(1)}%)
+      </div>
     </React.Fragment>
   );
 };
