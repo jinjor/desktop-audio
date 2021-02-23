@@ -1432,10 +1432,12 @@ func (a *Audio) Read(buf []byte) (int, error) {
 		endTime := now()
 		a.state.processTime = endTime - timestamp
 		if a.state.processTime > responseDelay {
-			log.Println("[WARN] time budget exceeded:", fmt.Sprint(int(a.state.processTime*1000))+"ms")
+			log.Printf("[WARN] time budget exceeded: processTime=%dms, activeNotes=%d\n",
+				int(a.state.processTime*1000), len(a.state.polyOsc.active))
 		} else {
-			// log.Println(fmt.Sprint(int(processTime*1000)) + "ms")
+			// log.Printf("%.2fms\n", a.state.processTime*1000)
 		}
+		// log.Println(len(a.state.polyOsc.active))
 		return len(buf), nil // io.EOF, etc.
 	}
 }
@@ -1481,12 +1483,15 @@ func NewAudio() (*Audio, error) {
 
 func processCommands(audio *Audio, commandCh <-chan []string) {
 	for command := range commandCh {
-		audio.update(command)
+		err := audio.update(command)
+		if err != nil {
+			panic(err)
+		}
 	}
 	log.Println("processCommands() ended.")
 }
 
-func (a *Audio) update(command []string) {
+func (a *Audio) update(command []string) error {
 	a.state.Lock()
 	defer a.state.Unlock()
 
@@ -1498,73 +1503,73 @@ func (a *Audio) update(command []string) {
 			command = command[1:]
 			value, err := strconv.ParseInt(command[0], 10, 64)
 			if err != nil {
-				panic(err)
+				return err
 			}
 			a.state.glideTime = int(value)
 		case "osc":
 			command = command[1:]
 			if len(command) != 2 {
-				panic(fmt.Errorf("invalid key-value pair %v", command))
+				return fmt.Errorf("invalid key-value pair %v", command)
 			}
 			err := a.state.oscParams.set(command[0], command[1])
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "adsr":
 			command = command[1:]
 			if len(command) != 2 {
-				panic(fmt.Errorf("invalid key-value pair %v", command))
+				return fmt.Errorf("invalid key-value pair %v", command)
 			}
 			err := a.state.adsrParams.set(command[0], command[1])
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "filter":
 			command = command[1:]
 			if len(command) != 2 {
-				panic(fmt.Errorf("invalid key-value pair %v", command))
+				return fmt.Errorf("invalid key-value pair %v", command)
 			}
 			err := a.state.filterParams.set(command[0], command[1])
 			if err != nil {
-				panic(err)
+				return err
 			}
 			a.Changes.Add("filter-shape")
 		case "lfo":
 			command = command[1:]
 			index, err := strconv.ParseInt(command[0], 10, 64)
 			if err != nil {
-				panic(err)
+				return err
 			}
 			command = command[1:]
 			if len(command) != 2 {
-				panic(fmt.Errorf("invalid key-value pair %v", command))
+				return fmt.Errorf("invalid key-value pair %v", command)
 			}
 			err = a.state.lfoParams[index].set(command[0], command[1])
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "envelope":
 			command = command[1:]
 			index, err := strconv.ParseInt(command[0], 10, 64)
 			if err != nil {
-				panic(err)
+				return err
 			}
 			command = command[1:]
 			if len(command) != 2 {
-				panic(fmt.Errorf("invalid key-value pair %v", command))
+				return fmt.Errorf("invalid key-value pair %v", command)
 			}
 			err = a.state.envelopeParams[index].set(command[0], command[1])
 			if err != nil {
-				panic(err)
+				return err
 			}
 		case "echo":
 			command = command[1:]
 			if len(command) != 2 {
-				panic(fmt.Errorf("invalid key-value pair %v", command))
+				return fmt.Errorf("invalid key-value pair %v", command)
 			}
 			err := a.state.echoParams.set(command[0], command[1])
 			if err != nil {
-				panic(err)
+				return err
 			}
 		}
 		a.Changes.Add("data")
@@ -1577,18 +1582,19 @@ func (a *Audio) update(command []string) {
 	case "note_on":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		a.addMidiEvent(&noteOn{note: int(note)})
 	case "note_off":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		a.addMidiEvent(&noteOff{note: int(note)})
 	default:
-		panic(fmt.Errorf("unknown command %v", command[0]))
+		return fmt.Errorf("unknown command %v", command[0])
 	}
+	return nil
 }
 
 // Close ...
