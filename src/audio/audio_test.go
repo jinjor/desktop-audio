@@ -20,7 +20,6 @@ func TestBenchmark(t *testing.T) {
 	expectNoError(t, err)
 	out := make([]byte, bufferSizeInBytes)
 	expectNoError(t, audio.update([]string{"poly"}))
-	expectNoError(t, audio.update([]string{"set", "lfo", "0", "destination", "freq"}))
 	_, err = audio.Read(out)
 	expectNoError(t, err)
 	for n := 0; n < polyphony; n++ {
