@@ -23,7 +23,7 @@ func makeNoFilterH(feedforward []float64, feedback []float64) ([]float64, []floa
 }
 
 func makeFIRLowpassH(feedforward []float64, feedback []float64, N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	if N%2 != 0 {
 		log.Panicf("N should be even")
 	}
@@ -38,7 +38,7 @@ func makeFIRLowpassH(feedforward []float64, feedback []float64, N int, fc float6
 }
 
 func makeFIRHighpassH(feedforward []float64, feedback []float64, N int, fc float64, windowFunc func(float64) float64) ([]float64, []float64) {
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	if N%2 != 0 {
 		log.Panicf("N should be even")
 	}
@@ -54,7 +54,7 @@ func makeFIRHighpassH(feedforward []float64, feedback []float64, N int, fc float
 
 func makeBiquadLowpassH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	b0 := (1 - math.Cos(w0)) / 2
 	b1 := (1 - math.Cos(w0))
@@ -70,7 +70,7 @@ func makeBiquadLowpassH(feedforward []float64, feedback []float64, fc float64, q
 }
 func makeBiquadHighpassH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	b0 := (1 + math.Cos(w0)) / 2
 	b1 := -(1 + math.Cos(w0))
@@ -87,7 +87,7 @@ func makeBiquadHighpassH(feedforward []float64, feedback []float64, fc float64, 
 
 func makeBiquadBandpass1H(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	b0 := math.Sin(w0) / 2
 	b1 := 0.0
@@ -104,7 +104,7 @@ func makeBiquadBandpass1H(feedforward []float64, feedback []float64, fc float64,
 
 func makeBiquadBandpass2H(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	b0 := alpha
 	b1 := 0.0
@@ -121,7 +121,7 @@ func makeBiquadBandpass2H(feedforward []float64, feedback []float64, fc float64,
 
 func makeBiquadNotchH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	b0 := 1.0
 	b1 := -2 * math.Cos(w0)
@@ -138,7 +138,7 @@ func makeBiquadNotchH(feedforward []float64, feedback []float64, fc float64, q f
 
 func makeBiquadAllpassH(feedforward []float64, feedback []float64, fc float64, q float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	b0 := 1 - alpha
 	b1 := -2 * math.Cos(w0)
@@ -155,7 +155,7 @@ func makeBiquadAllpassH(feedforward []float64, feedback []float64, fc float64, q
 
 func makeBiquadPeakingEQH(feedforward []float64, feedback []float64, fc float64, q float64, dBgain float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	A := math.Pow(10, dBgain/40)
 	b0 := 1 + alpha*A
@@ -173,7 +173,7 @@ func makeBiquadPeakingEQH(feedforward []float64, feedback []float64, fc float64,
 
 func makeBiquadLowShelfH(feedforward []float64, feedback []float64, fc float64, q float64, dBgain float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	A := math.Pow(10, dBgain/40)
 	b0 := A * ((A + 1) - (A-1)*math.Cos(w0) + 2*math.Sqrt(A)*alpha)
@@ -191,7 +191,7 @@ func makeBiquadLowShelfH(feedforward []float64, feedback []float64, fc float64, 
 
 func makeBiquadHighShelfH(feedforward []float64, feedback []float64, fc float64, q float64, dBgain float64) ([]float64, []float64) {
 	// from RBJ's cookbook
-	w0 := 2 * math.Pi * fc
+	w0 := twoPi * fc
 	alpha := math.Sin(w0) / (2 * q)
 	A := math.Pow(10, dBgain/40)
 	b0 := A * ((A + 1) + (A-1)*math.Cos(w0) + 2*math.Sqrt(A)*alpha)
