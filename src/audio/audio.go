@@ -967,88 +967,33 @@ func (e *echo) step(in float64) float64 {
 
 // ----- Destination ----- //
 
-const (
-	destNone = iota
-	destVibrato
-	destTremolo
-	destFM
-	destPM
-	destAM
-	destFreq
-	destFilterFreq
-	destFilterQ
-	destFilterQ0V
-	destFilterGain
-	destFilterGain0V
-	destLfo0Freq
-	destLfo1Freq
-	destLfo2Freq
-	destLfo0Amount
-	destLfo1Amount
-	destLfo2Amount
-)
+/*
+generate-enum destination
+
+destNone none
+destVibrato vibrato
+destTremolo tremolo
+destFM fm
+destPM pm
+destAM am
+destFreq freq
+destFilterFreq filter_freq
+destFilterQ filter_q
+destFilterQ0V filter_q_0v
+destFilterGain filter_gain
+destFilterGain0V filter_gain_0v
+destLfo0Freq lfo0_freq
+destLfo1Freq lfo1_freq
+destLfo2Freq lfo2_freq
+destLfo0Amount lfo0_amount
+destLfo1Amount lfo1_amount
+destLfo2Amount lfo2_amount
+
+EOF
+*/
 
 var destLfoFreq = [3]int{destLfo0Freq, destLfo1Freq, destLfo2Freq}
 var destLfoAmount = [3]int{destLfo0Amount, destLfo1Amount, destLfo2Amount}
-
-func destinationFromString(s string) int {
-	switch s {
-	case "none":
-		return destNone
-	case "vibrato":
-		return destVibrato
-	case "tremolo":
-		return destTremolo
-	case "fm":
-		return destFM
-	case "pm":
-		return destPM
-	case "am":
-		return destAM
-	case "freq":
-		return destFreq
-	case "filter_freq":
-		return destFilterFreq
-	case "filter_q":
-		return destFilterQ
-	case "filter_q_0v":
-		return destFilterQ0V
-	case "filter_gain":
-		return destFilterGain
-	case "fitler_gain_0v":
-		return destFilterGain0V
-	}
-	return destNone
-}
-func destinationToString(d int) string {
-	switch d {
-	case destNone:
-		return "none"
-	case destVibrato:
-		return "vibrato"
-	case destTremolo:
-		return "tremolo"
-	case destFM:
-		return "fm"
-	case destPM:
-		return "pm"
-	case destAM:
-		return "am"
-	case destFreq:
-		return "freq"
-	case destFilterFreq:
-		return "filter_freq"
-	case destFilterQ:
-		return "filter_q"
-	case destFilterQ0V:
-		return "filter_q_0v"
-	case destFilterGain:
-		return "filter_gain"
-	case destFilterGain0V:
-		return "filter_gain_0v"
-	}
-	return "none"
-}
 
 // ----- Envelope ----- //
 
