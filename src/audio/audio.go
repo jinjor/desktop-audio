@@ -322,7 +322,7 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 // ----- OSC ----- //
 
 type oscParams struct {
-	kind   string
+	kind   int
 	octave int // -2 ~ 2
 	coarse int // -12 ~ 12
 	fine   int // -100 ~ 100 cent
@@ -341,14 +341,14 @@ func (o *oscParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to oscParams")
 		return
 	}
-	o.kind = j.Kind
+	o.kind = waveKindFromString(j.Kind)
 	o.octave = j.Octave
 	o.coarse = j.Coarse
 	o.fine = j.Fine
 }
 func (o *oscParams) toJSON() json.RawMessage {
 	return toRawMessage(&oscJSON{
-		Kind:   o.kind,
+		Kind:   waveKindToString(o.kind),
 		Octave: o.octave,
 		Coarse: o.coarse,
 		Fine:   o.fine,
@@ -357,7 +357,7 @@ func (o *oscParams) toJSON() json.RawMessage {
 func (o *oscParams) set(key string, value string) error {
 	switch key {
 	case "kind":
-		o.kind = value
+		o.kind = waveKindFromString(value)
 	case "octave":
 		value, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
@@ -381,7 +381,7 @@ func (o *oscParams) set(key string, value string) error {
 }
 
 type osc struct {
-	kind      string
+	kind      int
 	glideTime int // ms
 	freq      float64
 	phase01   float64
@@ -423,37 +423,37 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 	p := positiveMod(o.phase01+phaseShift/(2.0*math.Pi), 1)
 	value := 0.0
 	switch o.kind {
-	case "sine":
+	case waveSine:
 		value = math.Sin(2 * math.Pi * p)
-	case "triangle":
+	case waveTriangle:
 		if p < 0.5 {
 			value = p*4 - 1
 		} else {
 			value = p*(-4) + 3
 		}
-	case "square":
+	case waveSquare:
 		if p < 0.5 {
 			value = 1
 		} else {
 			value = -1
 		}
-	case "square-wt":
+	case waveSquareWT:
 		note := freqToNote(freq)
 		value = blsquareWT.tables[note].getAtPhase(2.0 * math.Pi * p)
-	case "pulse":
+	case wavePulse:
 		if p < 0.25 {
 			value = 1
 		} else {
 			value = -1
 		}
-	case "saw":
+	case waveSaw:
 		value = p*2 - 1
-	case "saw-wt":
+	case waveSawWT:
 		note := freqToNote(freq)
 		value = blsawWT.tables[note].getAtPhase(2.0 * math.Pi * p)
-	case "saw-rev":
+	case waveSawRev:
 		value = p*(-2) + 1
-	case "noise":
+	case waveNoise:
 		value = rand.Float64()*2 - 1
 	}
 	o.phase01 += freq / float64(sampleRate)
@@ -469,6 +469,25 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 	}
 	return value
 }
+
+// ----- Wave Kind ----- //
+
+/*
+generate-enum waveKind
+
+waveNone none
+waveSine sine
+waveTriangle triangle
+waveSquare square
+waveSquareWT square-wt
+wavePulse pulse
+waveSaw saw
+waveSawWT saw-wt
+waveSawRev saw-rev
+waveNoise noise
+
+EOF
+*/
 
 // ----- ADSR ----- //
 
@@ -1108,7 +1127,7 @@ func newEnvelope() *envelope {
 
 type lfoParams struct {
 	destination int
-	wave        string
+	wave        int
 	freqType    string
 	freq        float64
 	amount      float64
@@ -1130,7 +1149,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 		return
 	}
 	l.destination = destinationFromString(j.Destination)
-	l.wave = j.Wave
+	l.wave = waveKindFromString(j.Wave)
 	l.freqType = j.FreqType
 	l.freq = j.Freq
 	l.amount = j.Amount
@@ -1138,7 +1157,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 func (l *lfoParams) toJSON() json.RawMessage {
 	return toRawMessage(&lfoJSON{
 		Destination: destinationToString(l.destination),
-		Wave:        l.wave,
+		Wave:        waveKindToString(l.wave),
 		FreqType:    l.freqType,
 		Freq:        l.freq,
 		Amount:      l.amount,
@@ -1148,7 +1167,7 @@ func (l *lfoParams) toJSON() json.RawMessage {
 func newLfoParams() *lfoParams {
 	return &lfoParams{
 		destination: destNone,
-		wave:        "sine",
+		wave:        waveSine,
 		freqType:    "none",
 		freq:        0,
 		amount:      0,
@@ -1175,7 +1194,7 @@ func (l *lfoParams) set(key string, value string) error {
 		// l.initByDestination(value)
 		l.destination = destinationFromString(value)
 	case "wave":
-		l.wave = value
+		l.wave = waveKindFromString(value)
 	case "freq":
 		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
@@ -1362,7 +1381,7 @@ func (s *state) toJSON() json.RawMessage {
 func newState() *state {
 	return &state{
 		events:         make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:      &oscParams{kind: "sine"},
+		oscParams:      &oscParams{kind: waveSine},
 		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
 		filterParams:   &filterParams{kind: "none", freq: 1000, q: 1, gain: 0, N: 50},
