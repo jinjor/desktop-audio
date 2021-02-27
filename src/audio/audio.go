@@ -415,7 +415,7 @@ func loadWavetableSet(path string) *WavetableSet {
 	return wts
 }
 func noteWithParamsToFreq(p *oscParams, note int) float64 {
-	return noteToFreq(note) * math.Pow(2, float64(p.octave+p.coarse+p.fine/100/12))
+	return noteToFreq(note) * math.Pow(2, float64(p.octave)+float64(p.coarse)/12+float64(p.fine)/100/12)
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
