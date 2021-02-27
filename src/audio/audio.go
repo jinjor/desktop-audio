@@ -93,7 +93,7 @@ type monoOsc struct {
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
-			oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
+			oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
 			adsr:      &adsr{},
 			filter:    &filter{},
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -180,7 +180,7 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
+				oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
 				adsr:      &adsr{},
 				filter:    &filter{},
 				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -434,7 +434,7 @@ type osc struct {
 	glideTime int // ms
 	freq      float64
 	level     float64
-	phase01   float64
+	phase     float64
 	gliding   bool
 	shiftPos  float64
 	prevFreq  float64
@@ -457,7 +457,7 @@ func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
 	o.freq = noteWithParamsToFreq(p, note)
 	o.level = p.level
-	o.phase01 = rand.Float64()
+	o.phase = rand.Float64() * 2.0 * math.Pi
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	nextFreq := noteWithParamsToFreq(p, note)
@@ -476,18 +476,20 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 		return 0.0
 	}
 	freq := o.freq * freqRatio
-	p := positiveMod(o.phase01+phaseShift/(2.0*math.Pi), 1)
+	phase := o.phase + phaseShift
 	value := 0.0
 	switch o.kind {
 	case waveSine:
-		value = math.Sin(2 * math.Pi * p)
+		value = math.Sin(phase)
 	case waveTriangle:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		if p < 0.5 {
 			value = p*4 - 1
 		} else {
 			value = p*(-4) + 3
 		}
 	case waveSquare:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		if p < 0.5 {
 			value = 1
 		} else {
@@ -495,25 +497,27 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 		}
 	case waveSquareWT:
 		note := freqToNote(freq)
-		value = blsquareWT.tables[note].getAtPhase(2.0 * math.Pi * p)
+		value = blsquareWT.tables[note].getAtPhase(phase)
 	case wavePulse:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		if p < 0.25 {
 			value = 1
 		} else {
 			value = -1
 		}
 	case waveSaw:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		value = p*2 - 1
 	case waveSawWT:
 		note := freqToNote(freq)
-		value = blsawWT.tables[note].getAtPhase(2.0 * math.Pi * p)
+		value = blsawWT.tables[note].getAtPhase(phase)
 	case waveSawRev:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		value = p*(-2) + 1
 	case waveNoise:
 		value = rand.Float64()*2 - 1
 	}
-	o.phase01 += freq / float64(sampleRate)
-	_, o.phase01 = math.Modf(o.phase01)
+	o.phase += 2.0 * math.Pi * freq / float64(sampleRate)
 	if o.gliding {
 		o.shiftPos++
 		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
@@ -1353,7 +1357,7 @@ func newLfo() *lfo {
 		destination: destNone,
 		freqType:    "none",
 		amount:      0,
-		osc:         &osc{phase01: rand.Float64(), level: 1.0},
+		osc:         &osc{phase: rand.Float64() * 2.0 * math.Pi, level: 1.0},
 	}
 }
 
