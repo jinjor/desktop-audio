@@ -479,7 +479,10 @@ var blsawWT *WavetableSet = loadWavetableSet("work/saw")
 
 func loadWavetableSet(path string) *WavetableSet {
 	wts := NewWavetableSet(128, 4096)
-	wts.Load(path)
+	err := wts.Load(path)
+	if err != nil {
+		panic(err)
+	}
 	return wts
 }
 func noteWithParamsToFreq(p *oscParams, note int) float64 {
