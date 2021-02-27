@@ -61,6 +61,7 @@ type OSC = {
   octave: number;
   coarse: number;
   fine: number;
+  level: number;
 };
 const OSCGroup = React.memo(
   (o: {
@@ -88,15 +89,21 @@ const OSCGroup = React.memo(
       (index: number, value: number) =>
         o.dispatch({ type: "changedOscFine", index, value })
     );
+    const onChangeLevel = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedOscLevel", index, value })
+    );
     return (
       <EditGroup label={`OSC ${o.index + 1}`}>
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
           <div style={{ textAlign: "center" }}>
             <OscKind value={o.value.kind} onChange={onChangeKind} />
           </div>
-          <Octave value={o.value.octave} onChange={onChangeOctave} />
-          <Coarse value={o.value.coarse} onChange={onChangeCoarse} />
-          <Fine value={o.value.fine} onChange={onChangeFine} />
+          <OSCOctave value={o.value.octave} onChange={onChangeOctave} />
+          <OSCCoarse value={o.value.coarse} onChange={onChangeCoarse} />
+          <OSCFine value={o.value.fine} onChange={onChangeFine} />
+          <OSCLevel value={o.value.level} onChange={onChangeLevel} />
         </div>
       </EditGroup>
     );
@@ -124,7 +131,7 @@ const OscKind = React.memo(
     );
   }
 );
-const Octave = React.memo(
+const OSCOctave = React.memo(
   (o: { onChange: (value: number) => void; value: number }) => {
     const min = -2;
     const max = 2;
@@ -143,7 +150,7 @@ const Octave = React.memo(
     );
   }
 );
-const Coarse = React.memo(
+const OSCCoarse = React.memo(
   (o: { onChange: (value: number) => void; value: number }) => {
     const min = -12;
     const max = 12;
@@ -162,7 +169,7 @@ const Coarse = React.memo(
     );
   }
 );
-const Fine = React.memo(
+const OSCFine = React.memo(
   (o: { onChange: (value: number) => void; value: number }) => {
     const min = -100;
     const max = 100;
@@ -176,8 +183,27 @@ const Fine = React.memo(
         exponential={true}
         value={o.value}
         from={0}
-        onChange={o.onChange}
+        onChange={onChange}
         label="Fine"
+      />
+    );
+  }
+);
+const OSCLevel = React.memo(
+  (o: { onChange: (value: number) => void; value: number }) => {
+    const min = 0;
+    const max = 1;
+    const steps = 400;
+    return (
+      <LabeledKnob
+        min={min}
+        max={max}
+        steps={steps}
+        exponential={false}
+        value={o.value}
+        from={0}
+        onChange={o.onChange}
+        label="Level"
       />
     );
   }
@@ -873,6 +899,7 @@ const paramsDecoder = d.object({
       octave: d.number(),
       coarse: d.number(),
       fine: d.number(),
+      level: d.number(),
     })
   ),
   adsr: d.object({
@@ -930,6 +957,7 @@ type ParamsAction =
   | { type: "changedOscOctave"; index: number; value: number }
   | { type: "changedOscCoarse"; index: number; value: number }
   | { type: "changedOscFine"; index: number; value: number }
+  | { type: "changedOscLevel"; index: number; value: number }
   | { type: "changedAdsrAttack"; value: number }
   | { type: "changedAdsrDecay"; value: number }
   | { type: "changedAdsrSustain"; value: number }
@@ -961,12 +989,14 @@ const App = () => {
           octave: 0,
           coarse: 0,
           fine: 0,
+          level: 1.0,
         },
         {
           kind: "sine",
           octave: 0,
           coarse: 0,
           fine: 0,
+          level: 1.0,
         },
       ],
       adsr: {
@@ -1043,6 +1073,17 @@ const App = () => {
         const { index, value } = action;
         ipcRenderer.send("audio", ["set", "osc", String(index), "fine", value]);
         return { ...state, oscs: setItem(state.oscs, index, { fine: value }) };
+      }
+      case "changedOscLevel": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "osc",
+          String(index),
+          "level",
+          value,
+        ]);
+        return { ...state, oscs: setItem(state.oscs, index, { level: value }) };
       }
       case "changedAdsrAttack": {
         const { value } = action;

@@ -338,15 +338,17 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 
 type oscParams struct {
 	kind   int
-	octave int // -2 ~ 2
-	coarse int // -12 ~ 12
-	fine   int // -100 ~ 100 cent
+	octave int     // -2 ~ 2
+	coarse int     // -12 ~ 12
+	fine   int     // -100 ~ 100 cent
+	level  float64 // 0 ~ 1
 }
 type oscJSON struct {
-	Kind   string `json:"kind"`
-	Octave int    `json:"octave"`
-	Coarse int    `json:"coarse"`
-	Fine   int    `json:"fine"`
+	Kind   string  `json:"kind"`
+	Octave int     `json:"octave"`
+	Coarse int     `json:"coarse"`
+	Fine   int     `json:"fine"`
+	Level  float64 `json:"level"`
 }
 
 func (o *oscParams) applyJSON(data json.RawMessage) {
@@ -360,6 +362,7 @@ func (o *oscParams) applyJSON(data json.RawMessage) {
 	o.octave = j.Octave
 	o.coarse = j.Coarse
 	o.fine = j.Fine
+	o.level = j.Level
 }
 func (o *oscParams) toJSON() json.RawMessage {
 	return toRawMessage(&oscJSON{
@@ -367,6 +370,7 @@ func (o *oscParams) toJSON() json.RawMessage {
 		Octave: o.octave,
 		Coarse: o.coarse,
 		Fine:   o.fine,
+		Level:  o.level,
 	})
 }
 func (o *oscParams) set(key string, value string) error {
@@ -391,6 +395,12 @@ func (o *oscParams) set(key string, value string) error {
 			return err
 		}
 		o.fine = int(value)
+	case "level":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		o.level = value
 	}
 	return nil
 }
@@ -399,6 +409,7 @@ type osc struct {
 	kind      int
 	glideTime int // ms
 	freq      float64
+	level     float64
 	phase01   float64
 	gliding   bool
 	shiftPos  float64
@@ -420,6 +431,7 @@ func noteWithParamsToFreq(p *oscParams, note int) float64 {
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
 	o.freq = noteWithParamsToFreq(p, note)
+	o.level = p.level
 	o.phase01 = rand.Float64()
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
@@ -482,7 +494,7 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 			o.gliding = false
 		}
 	}
-	return value
+	return value * o.level
 }
 
 // ----- Wave Kind ----- //
@@ -1267,7 +1279,7 @@ func newLfo() *lfo {
 		destination: destNone,
 		freqType:    "none",
 		amount:      0,
-		osc:         &osc{phase01: rand.Float64()},
+		osc:         &osc{phase01: rand.Float64(), level: 1.0},
 	}
 }
 
@@ -1437,7 +1449,7 @@ func (s *state) toJSON() json.RawMessage {
 func newState() *state {
 	return &state{
 		events:         make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:      []*oscParams{{kind: waveSine}, {kind: waveSine}},
+		oscParams:      []*oscParams{{kind: waveSine, level: 1.0}, {kind: waveSine, level: 1.0}},
 		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
 		filterParams:   &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
