@@ -157,7 +157,8 @@ func (m *monoOsc) calc(
 				}
 			}
 		}
-		out[i] = echo.step(m.o.step(event, filterParams))
+		out[i] = m.o.step(event, filterParams)
+		out[i] = echo.step(out[i])
 	}
 }
 
@@ -299,6 +300,9 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	}
 	o.adsr.step()
 	for _, envelope := range o.envelopes {
+		if !envelope.enabled {
+			continue
+		}
 		envelope.step()
 	}
 	freqRatio := 1.0
@@ -309,6 +313,9 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		amountGain := 1.0
 		lfoFreqRatio := 1.0
 		for _, envelope := range o.envelopes {
+			if !envelope.enabled {
+				continue
+			}
 			if envelope.destination == destLfoAmount[lfoIndex] {
 				amountGain *= envelope.value
 			}
@@ -323,6 +330,9 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		filterFreqRatio *= _filterFreqRatio
 	}
 	for _, envelope := range o.envelopes {
+		if !envelope.enabled {
+			continue
+		}
 		if envelope.destination == destFreq {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
@@ -331,7 +341,14 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	for _, osc := range o.oscs {
 		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 	}
-	return o.filter.processOneSample(value, filterParams, filterFreqRatio, o.envelopes)
+	// TODO
+	o.filter.enabled = filterParams.enabled
+	o.filter.kind = filterParams.kind
+	o.filter.freq = filterParams.freq
+	o.filter.q = filterParams.q
+	o.filter.gain = filterParams.gain
+	o.filter.N = filterParams.N
+	return o.filter.step(value, filterFreqRatio, o.envelopes)
 }
 
 // ----- OSC ----- //
@@ -436,6 +453,7 @@ func noteWithParamsToFreq(p *oscParams, note int) float64 {
 	return noteToFreq(note) * math.Pow(2, float64(p.octave)+float64(p.coarse)/12+float64(p.fine)/100/12)
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
+	o.enabled = p.enabled
 	o.kind = p.kind
 	o.freq = noteWithParamsToFreq(p, note)
 	o.level = p.level
@@ -446,6 +464,7 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	if math.Abs(nextFreq-o.freq) < 0.001 {
 		return
 	}
+	o.enabled = p.enabled
 	o.glideTime = glideTime
 	o.prevFreq = o.freq
 	o.nextFreq = nextFreq
@@ -453,6 +472,9 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	o.shiftPos = 0
 }
 func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
+	if !o.enabled {
+		return 0.0
+	}
 	freq := o.freq * freqRatio
 	p := positiveMod(o.phase01+phaseShift/(2.0*math.Pi), 1)
 	value := 0.0
@@ -843,18 +865,26 @@ func (f *filterParams) set(key string, value string) error {
 
 type filter struct {
 	enabled bool
+	kind    int
 	freq    float64
 	q       float64
 	gain    float64
+	N       int
 	a       []float64 // feedforward
 	b       []float64 // feedback
 	past    []float64
 }
 
-func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64, envelopes []*envelope) float64 {
+func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) float64 {
+	if !f.enabled {
+		return in
+	}
 	qExponent := 1.0
 	gainRatio := 1.0
 	for _, envelope := range envelopes {
+		if !envelope.enabled {
+			continue
+		}
 		if envelope.destination == destFilterFreq {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
@@ -865,7 +895,7 @@ func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64
 			gainRatio *= envelope.value
 		}
 	}
-	f.a, f.b = makeH(f.a, f.b, p, freqRatio, qExponent, gainRatio)
+	f.a, f.b = makeH(f.a, f.b, f.kind, f.N, f.freq*freqRatio, math.Pow(f.q, qExponent), f.gain*gainRatio)
 	pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
 	if len(f.past) < pastLength {
 		f.past = make([]float64, pastLength)
@@ -875,19 +905,18 @@ func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64
 func makeH(
 	feedforward []float64,
 	feedback []float64,
-	f *filterParams,
-	freqRatio float64,
-	qExponent float64,
-	gainRatio float64,
+	kind int,
+	N int,
+	freq float64,
+	q float64,
+	gain float64,
 ) ([]float64, []float64) {
-	fc := f.freq * freqRatio / sampleRate
-	q := math.Pow(f.q, qExponent)
-	gain := f.gain * gainRatio
-	switch f.kind {
+	fc := freq / sampleRate
+	switch kind {
 	case filterLowPassFIR:
-		return makeFIRLowpassH(feedforward, feedback, f.N, fc, hamming)
+		return makeFIRLowpassH(feedforward, feedback, N, fc, hamming)
 	case filterHighPassFIR:
-		return makeFIRHighpassH(feedforward, feedback, f.N, fc, hamming)
+		return makeFIRHighpassH(feedforward, feedback, N, fc, hamming)
 	case filterLowPass:
 		return makeBiquadLowpassH(feedforward, feedback, fc, q)
 	case filterHighPass:
@@ -1055,7 +1084,7 @@ func (e *echo) applyParams(p *echoParams) {
 }
 
 func (e *echo) step(in float64) float64 {
-	if len(e.delay.past) == 0 {
+	if !e.enabled {
 		return in
 	}
 	delayed := e.delay.getDelayed()
@@ -1326,6 +1355,7 @@ func newLfo() *lfo {
 }
 
 func (l *lfo) applyParams(p *lfoParams) {
+	l.enabled = p.enabled
 	l.destination = p.destination
 	l.osc.kind = p.wave
 	l.freqType = p.freqType
@@ -1338,6 +1368,9 @@ func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float
 	phaseShift := 0.0
 	ampRatio := 1.0
 	filterFreqRatio := 1.0
+	if !l.enabled {
+		return freqRatio, phaseShift, ampRatio, filterFreqRatio
+	}
 	switch l.destination {
 	case destVibrato:
 		amount := l.amount * amountGain
@@ -1802,7 +1835,19 @@ var filterShapeFeedback = []float64{}
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0, 1.0, 1.0)
+	kind := a.state.filterParams.kind
+	if !a.state.filterParams.enabled {
+		kind = filterNone
+	}
+	filterShapeFeedforward, filterShapeFeedback := makeH(
+		filterShapeFeedforward,
+		filterShapeFeedback,
+		kind,
+		a.state.filterParams.N,
+		a.state.filterParams.freq,
+		a.state.filterParams.q,
+		a.state.filterParams.gain,
+	)
 	a.state.Unlock()
 	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
 }
