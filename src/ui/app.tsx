@@ -1511,7 +1511,7 @@ const App = () => {
         </EditGroup>
         <EditGroup
           label="FILTER"
-          enabled={p.echo.enabled}
+          enabled={p.filter.enabled}
           canBypass={true}
           onChangeEnabled={onChangeFilterEnabled}
         >
