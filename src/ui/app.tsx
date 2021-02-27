@@ -129,6 +129,7 @@ const Fine = React.memo(
     const min = -100;
     const max = 100;
     const steps = max - min + 1;
+    const onChange = (value: number) => o.onChange(Math.round(value));
     return (
       <LabeledKnob
         min={min}
