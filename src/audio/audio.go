@@ -51,15 +51,48 @@ func positiveMod(a float64, b float64) float64 {
 func noteToFreq(note int) float64 {
 	return baseFreq * math.Pow(2, float64(note-69)/12)
 }
+
+// func freqToNote(freq float64) int {
+// 	note := int(math.Log2(freq/baseFreq)*12.0) + 69
+// 	if note < 0 {
+// 		note = 0
+// 	}
+// 	if note >= 128 {
+// 		note = 127
+// 	}
+// 	return note
+// }
+
+var freqs = makeFreqs()
+
+func makeFreqs() []float64 {
+	freqs := make([]float64, 128)
+	for i := 0; i < 128; i++ {
+		freqs[i] = noteToFreq(i)
+	}
+	return freqs
+}
 func freqToNote(freq float64) int {
-	note := int(math.Log2(freq/baseFreq)*12.0) + 69
-	if note < 0 {
-		note = 0
+	low := 0
+	high := 128
+	if freq < freqs[low] {
+		return 0
 	}
-	if note >= 128 {
-		note = 127
+	if freq >= freqs[high-1] {
+		return high - 1
 	}
-	return note
+	for i := 0; i < 128; i++ {
+		curr := (low + high) / 2
+		if freq < freqs[curr] {
+			high = curr
+		} else {
+			low = curr
+		}
+		if high-low <= 1 {
+			return low
+		}
+	}
+	panic("infinite loop in freqToNote()")
 }
 func toRawMessage(v interface{}) json.RawMessage {
 	bytes, err := json.Marshal(v)
