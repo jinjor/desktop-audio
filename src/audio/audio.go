@@ -93,7 +93,7 @@ type monoOsc struct {
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
-			osc:       &osc{phase01: rand.Float64()},
+			oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
 			adsr:      &adsr{},
 			filter:    &filter{},
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -134,10 +134,10 @@ func (m *monoOsc) calc(
 					}
 					m.activeNotes[0] = data.note
 					if len(m.activeNotes) == 1 {
-						m.o.osc.initWithNote(oscParams[0], data.note)
+						m.o.initWithNote(oscParams, data.note)
 						event = enumNoteOn
 					} else {
-						m.o.osc.glide(oscParams[0], m.activeNotes[0], glideTime)
+						m.o.glide(oscParams, m.activeNotes[0], glideTime)
 					}
 				}
 			case *noteOff:
@@ -151,7 +151,7 @@ func (m *monoOsc) calc(
 				}
 				m.activeNotes = m.activeNotes[:len(m.activeNotes)-removed]
 				if len(m.activeNotes) > 0 {
-					m.o.osc.glide(oscParams[0], m.activeNotes[0], glideTime)
+					m.o.glide(oscParams, m.activeNotes[0], glideTime)
 				} else {
 					event = enumNoteOff
 				}
@@ -179,7 +179,7 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				osc:       &osc{phase01: rand.Float64()},
+				oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
 				adsr:      &adsr{},
 				filter:    &filter{},
 				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -213,7 +213,7 @@ func (p *polyOsc) calc(
 					p.pooled = p.pooled[:lenPooled-1]
 					p.active = append(p.active, o)
 					o.note = data.note
-					o.osc.initWithNote(oscParams[0], data.note)
+					o.initWithNote(oscParams, data.note)
 					o.adsr.init(adsrParams)
 				} else {
 					log.Println("maxPoly exceeded")
@@ -260,7 +260,7 @@ func (p *polyOsc) calc(
 // ----- DECORATED OSC ----- //
 
 type decoratedOsc struct {
-	osc       *osc
+	oscs      []*osc
 	adsr      *adsr
 	filter    *filter
 	lfos      []*lfo
@@ -273,6 +273,16 @@ const (
 	enumNoteOff
 )
 
+func (o *decoratedOsc) initWithNote(p []*oscParams, note int) {
+	for i, osc := range o.oscs {
+		osc.initWithNote(p[i], note)
+	}
+}
+func (o *decoratedOsc) glide(p []*oscParams, note int, glideTime int) {
+	for i, osc := range o.oscs {
+		osc.glide(p[i], note, glideTime)
+	}
+}
 func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	switch event {
 	case enumNoEvent:
@@ -306,7 +316,7 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 				lfoFreqRatio *= math.Pow(16.0, envelope.value)
 			}
 		}
-		_freqRatio, _phaseShift, _ampRatio, _filterFreqRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
+		_freqRatio, _phaseShift, _ampRatio, _filterFreqRatio := lfo.step(o.oscs[0], amountGain, lfoFreqRatio) // TODO
 		freqRatio *= _freqRatio
 		phaseShift += _phaseShift
 		ampRatio *= _ampRatio
@@ -317,7 +327,10 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
 	}
-	value := o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+	value := 0.0
+	for _, osc := range o.oscs {
+		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+	}
 	return o.filter.processOneSample(value, filterParams, filterFreqRatio, o.envelopes)
 }
 
