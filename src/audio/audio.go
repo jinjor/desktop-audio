@@ -105,7 +105,7 @@ func newMonoOsc() *monoOsc {
 
 func (m *monoOsc) calc(
 	events [][]*midiEvent,
-	oscParams *oscParams,
+	oscParams []*oscParams,
 	adsrParams *adsrParams,
 	filterParams *filterParams,
 	lfoParams []*lfoParams,
@@ -134,10 +134,10 @@ func (m *monoOsc) calc(
 					}
 					m.activeNotes[0] = data.note
 					if len(m.activeNotes) == 1 {
-						m.o.osc.initWithNote(oscParams, data.note)
+						m.o.osc.initWithNote(oscParams[0], data.note)
 						event = enumNoteOn
 					} else {
-						m.o.osc.glide(oscParams, m.activeNotes[0], glideTime)
+						m.o.osc.glide(oscParams[0], m.activeNotes[0], glideTime)
 					}
 				}
 			case *noteOff:
@@ -151,7 +151,7 @@ func (m *monoOsc) calc(
 				}
 				m.activeNotes = m.activeNotes[:len(m.activeNotes)-removed]
 				if len(m.activeNotes) > 0 {
-					m.o.osc.glide(oscParams, m.activeNotes[0], glideTime)
+					m.o.osc.glide(oscParams[0], m.activeNotes[0], glideTime)
 				} else {
 					event = enumNoteOff
 				}
@@ -194,7 +194,7 @@ func newPolyOsc() *polyOsc {
 
 func (p *polyOsc) calc(
 	events [][]*midiEvent,
-	oscParams *oscParams,
+	oscParams []*oscParams,
 	adsrParams *adsrParams,
 	filterParams *filterParams,
 	lfoParams []*lfoParams,
@@ -213,7 +213,7 @@ func (p *polyOsc) calc(
 					p.pooled = p.pooled[:lenPooled-1]
 					p.active = append(p.active, o)
 					o.note = data.note
-					o.osc.initWithNote(oscParams, data.note)
+					o.osc.initWithNote(oscParams[0], data.note)
 					o.adsr.init(adsrParams)
 				} else {
 					log.Println("maxPoly exceeded")
@@ -1329,7 +1329,7 @@ func (c *Changes) Delete(key string) {
 type state struct {
 	sync.Mutex
 	events         [][]*midiEvent // length: samplesPerCycle * 2
-	oscParams      *oscParams
+	oscParams      []*oscParams
 	adsrParams     *adsrParams
 	lfoParams      []*lfoParams
 	filterParams   *filterParams
@@ -1348,7 +1348,7 @@ type state struct {
 type stateJSON struct {
 	Poly      string            `json:"poly"`
 	GlideTime int               `json:"glideTime"`
-	Osc       json.RawMessage   `json:"osc"`
+	Oscs      []json.RawMessage `json:"oscs"`
 	Adsr      json.RawMessage   `json:"adsr"`
 	Lfos      []json.RawMessage `json:"lfos"`
 	Envelopes []json.RawMessage `json:"envelopes"`
@@ -1360,12 +1360,20 @@ func (s *state) applyJSON(data json.RawMessage) {
 	var j stateJSON
 	err := json.Unmarshal(data, &j)
 	if err != nil {
+		log.Println(err)
+		log.Println(data)
 		log.Println("failed to apply JSON to state")
 		return
 	}
 	s.polyMode = j.Poly == "poly"
 	s.glideTime = j.GlideTime
-	s.oscParams.applyJSON(j.Osc)
+	if len(j.Oscs) == len(s.oscParams) {
+		for i, j := range j.Oscs {
+			s.oscParams[i].applyJSON(j)
+		}
+	} else {
+		log.Println("failed to apply JSON to osc params")
+	}
 	s.adsrParams.applyJSON(j.Adsr)
 	s.filterParams.applyJSON(j.Filter)
 	if len(j.Lfos) == len(s.lfoParams) {
@@ -1385,6 +1393,10 @@ func (s *state) applyJSON(data json.RawMessage) {
 	s.echoParams.applyJSON(j.Echo)
 }
 func (s *state) toJSON() json.RawMessage {
+	oscJsons := make([]json.RawMessage, len(s.oscParams))
+	for i, oscParam := range s.oscParams {
+		oscJsons[i] = oscParam.toJSON()
+	}
 	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
 	for i, lfoParam := range s.lfoParams {
 		lfoJsons[i] = lfoParam.toJSON()
@@ -1400,7 +1412,7 @@ func (s *state) toJSON() json.RawMessage {
 	return toRawMessage(&stateJSON{
 		Poly:      poly,
 		GlideTime: s.glideTime,
-		Osc:       s.oscParams.toJSON(),
+		Oscs:      oscJsons,
 		Adsr:      s.adsrParams.toJSON(),
 		Lfos:      lfoJsons,
 		Envelopes: envelopeJsons,
@@ -1412,7 +1424,7 @@ func (s *state) toJSON() json.RawMessage {
 func newState() *state {
 	return &state{
 		events:         make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:      &oscParams{kind: waveSine},
+		oscParams:      []*oscParams{{kind: waveSine}, {kind: waveSine}},
 		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
 		filterParams:   &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
@@ -1587,10 +1599,15 @@ func (a *Audio) update(command []string) error {
 			a.state.glideTime = int(value)
 		case "osc":
 			command = command[1:]
+			index, err := strconv.ParseInt(command[0], 10, 64)
+			if err != nil {
+				return err
+			}
+			command = command[1:]
 			if len(command) != 2 {
 				return fmt.Errorf("invalid key-value pair %v", command)
 			}
-			err := a.state.oscParams.set(command[0], command[1])
+			err = a.state.oscParams[index].set(command[0], command[1])
 			if err != nil {
 				return err
 			}

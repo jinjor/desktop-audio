@@ -56,11 +56,55 @@ const GlideTime = React.memo(
     );
   }
 );
+type OSC = {
+  kind: string;
+  octave: number;
+  coarse: number;
+  fine: number;
+};
+const OSCGroup = React.memo(
+  (o: {
+    index: number;
+    value: OSC;
+    dispatch: React.Dispatch<ParamsAction>;
+  }) => {
+    const onChangeKind = useCallbackWithIndex(
+      o.index,
+      (index: number, value: string) =>
+        o.dispatch({ type: "changedOscKind", index, value })
+    );
+    const onChangeOctave = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedOscOctave", index, value })
+    );
+    const onChangeCoarse = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedOscCoarse", index, value })
+    );
+    const onChangeFine = useCallbackWithIndex(
+      o.index,
+      (index: number, value: number) =>
+        o.dispatch({ type: "changedOscFine", index, value })
+    );
+    return (
+      <EditGroup label={`OSC ${o.index + 1}`}>
+        <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+          <div style={{ textAlign: "center" }}>
+            <OscKind value={o.value.kind} onChange={onChangeKind} />
+          </div>
+          <Octave value={o.value.octave} onChange={onChangeOctave} />
+          <Coarse value={o.value.coarse} onChange={onChangeCoarse} />
+          <Fine value={o.value.fine} onChange={onChangeFine} />
+        </div>
+      </EditGroup>
+    );
+  }
+);
 
 const OscKind = React.memo(
-  (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
-    const onChange = (value: string) =>
-      o.dispatch({ type: "changedOscKind", value });
+  (o: { onChange: (value: string) => void; value: string }) => {
     return (
       <WaveSelect
         list={[
@@ -75,15 +119,13 @@ const OscKind = React.memo(
         ]}
         value={o.value}
         columns={3}
-        onChange={onChange}
+        onChange={o.onChange}
       />
     );
   }
 );
 const Octave = React.memo(
-  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
-    const onChange = (value: number) =>
-      o.dispatch({ type: "changedOscOctave", value });
+  (o: { onChange: (value: number) => void; value: number }) => {
     const min = -2;
     const max = 2;
     const steps = max - min + 1;
@@ -95,16 +137,14 @@ const Octave = React.memo(
         from={0}
         exponential={true}
         value={o.value}
-        onChange={onChange}
+        onChange={o.onChange}
         label="Octave"
       />
     );
   }
 );
 const Coarse = React.memo(
-  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
-    const onChange = (value: number) =>
-      o.dispatch({ type: "changedOscCoarse", value });
+  (o: { onChange: (value: number) => void; value: number }) => {
     const min = -12;
     const max = 12;
     const steps = max - min + 1;
@@ -116,16 +156,14 @@ const Coarse = React.memo(
         exponential={true}
         value={o.value}
         from={0}
-        onChange={onChange}
+        onChange={o.onChange}
         label="Coarse"
       />
     );
   }
 );
 const Fine = React.memo(
-  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
-    const onChange = (value: number) =>
-      o.dispatch({ type: "changedOscFine", value });
+  (o: { onChange: (value: number) => void; value: number }) => {
     const min = -100;
     const max = 100;
     const steps = max - min + 1;
@@ -137,7 +175,7 @@ const Fine = React.memo(
         exponential={true}
         value={o.value}
         from={0}
-        onChange={onChange}
+        onChange={o.onChange}
         label="Fine"
       />
     );
@@ -828,12 +866,14 @@ const setItem = <T,>(array: T[], index: number, updates: Partial<T>): T[] => {
 const paramsDecoder = d.object({
   poly: d.string(),
   glideTime: d.number(),
-  osc: d.object({
-    kind: d.string(),
-    octave: d.number(),
-    coarse: d.number(),
-    fine: d.number(),
-  }),
+  oscs: d.array(
+    d.object({
+      kind: d.string(),
+      octave: d.number(),
+      coarse: d.number(),
+      fine: d.number(),
+    })
+  ),
   adsr: d.object({
     attack: d.number(),
     decay: d.number(),
@@ -885,10 +925,10 @@ type Action =
 type ParamsAction =
   | { type: "changedPoly"; value: string }
   | { type: "changedGlideTime"; value: number }
-  | { type: "changedOscKind"; value: string }
-  | { type: "changedOscOctave"; value: number }
-  | { type: "changedOscCoarse"; value: number }
-  | { type: "changedOscFine"; value: number }
+  | { type: "changedOscKind"; index: number; value: string }
+  | { type: "changedOscOctave"; index: number; value: number }
+  | { type: "changedOscCoarse"; index: number; value: number }
+  | { type: "changedOscFine"; index: number; value: number }
   | { type: "changedAdsrAttack"; value: number }
   | { type: "changedAdsrDecay"; value: number }
   | { type: "changedAdsrSustain"; value: number }
@@ -914,12 +954,20 @@ const App = () => {
     params: {
       poly: "mono",
       glideTime: 100,
-      osc: {
-        kind: "sine",
-        octave: 0,
-        coarse: 0,
-        fine: 0,
-      },
+      oscs: [
+        {
+          kind: "sine",
+          octave: 0,
+          coarse: 0,
+          fine: 0,
+        },
+        {
+          kind: "sine",
+          octave: 0,
+          coarse: 0,
+          fine: 0,
+        },
+      ],
       adsr: {
         attack: 0,
         decay: 100,
@@ -958,24 +1006,42 @@ const App = () => {
         return { ...state, glideTime: value };
       }
       case "changedOscKind": {
-        const { value } = action;
-        ipcRenderer.send("audio", ["set", "osc", "kind", value]);
-        return { ...state, osc: { ...state.osc, kind: value } };
+        const { index, value } = action;
+        ipcRenderer.send("audio", ["set", "osc", String(index), "kind", value]);
+        return { ...state, oscs: setItem(state.oscs, index, { kind: value }) };
       }
       case "changedOscOctave": {
-        const { value } = action;
-        ipcRenderer.send("audio", ["set", "osc", "octave", value]);
-        return { ...state, osc: { ...state.osc, octave: value } };
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "osc",
+          String(index),
+          "octave",
+          value,
+        ]);
+        return {
+          ...state,
+          oscs: setItem(state.oscs, index, { octave: value }),
+        };
       }
       case "changedOscCoarse": {
-        const { value } = action;
-        ipcRenderer.send("audio", ["set", "osc", "coarse", value]);
-        return { ...state, osc: { ...state.osc, coarse: value } };
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "osc",
+          String(index),
+          "coarse",
+          value,
+        ]);
+        return {
+          ...state,
+          oscs: setItem(state.oscs, index, { coarse: value }),
+        };
       }
       case "changedOscFine": {
-        const { value } = action;
-        ipcRenderer.send("audio", ["set", "osc", "fine", value]);
-        return { ...state, osc: { ...state.osc, fine: value } };
+        const { index, value } = action;
+        ipcRenderer.send("audio", ["set", "osc", String(index), "fine", value]);
+        return { ...state, oscs: setItem(state.oscs, index, { fine: value }) };
       }
       case "changedAdsrAttack": {
         const { value } = action;
@@ -1232,16 +1298,8 @@ const App = () => {
             <GlideTime value={p.glideTime} dispatch={dispatchParam} />
           </div>
         </EditGroup>
-        <EditGroup label="OSC">
-          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-            <div style={{ textAlign: "center" }}>
-              <OscKind value={p.osc.kind} dispatch={dispatchParam} />
-            </div>
-            <Octave value={p.osc.octave} dispatch={dispatchParam} />
-            <Coarse value={p.osc.coarse} dispatch={dispatchParam} />
-            <Fine value={p.osc.fine} dispatch={dispatchParam} />
-          </div>
-        </EditGroup>
+        <OSCGroup index={0} value={p.oscs[0]} dispatch={dispatchParam} />
+        <OSCGroup index={1} value={p.oscs[1]} dispatch={dispatchParam} />
         <EditGroup label="Envelope">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
             <Attack value={p.adsr.attack} dispatch={dispatchParam} />
