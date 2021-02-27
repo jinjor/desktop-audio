@@ -1464,7 +1464,7 @@ func (a *Audio) ApplyJSON(data []byte) {
 func (a *Audio) ToJSON() []byte {
 	a.state.Lock()
 	defer a.state.Unlock()
-	bytes, err := json.Marshal(a.state.toJSON())
+	bytes, err := json.Marshal(a.toJSON())
 	if err != nil {
 		panic(err)
 	}
