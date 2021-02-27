@@ -985,6 +985,9 @@ type delay struct {
 }
 
 func (d *delay) applyParams(millis float64) {
+	if millis < 10 {
+		millis = 10
+	}
 	length := int(sampleRate * millis / 1000)
 	if cap(d.past) >= length {
 		d.past = d.past[0:length]
