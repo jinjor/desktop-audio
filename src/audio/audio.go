@@ -337,18 +337,20 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 // ----- OSC ----- //
 
 type oscParams struct {
-	kind   int
-	octave int     // -2 ~ 2
-	coarse int     // -12 ~ 12
-	fine   int     // -100 ~ 100 cent
-	level  float64 // 0 ~ 1
+	enabled bool
+	kind    int
+	octave  int     // -2 ~ 2
+	coarse  int     // -12 ~ 12
+	fine    int     // -100 ~ 100 cent
+	level   float64 // 0 ~ 1
 }
 type oscJSON struct {
-	Kind   string  `json:"kind"`
-	Octave int     `json:"octave"`
-	Coarse int     `json:"coarse"`
-	Fine   int     `json:"fine"`
-	Level  float64 `json:"level"`
+	Enabled bool    `json:"enabled"`
+	Kind    string  `json:"kind"`
+	Octave  int     `json:"octave"`
+	Coarse  int     `json:"coarse"`
+	Fine    int     `json:"fine"`
+	Level   float64 `json:"level"`
 }
 
 func (o *oscParams) applyJSON(data json.RawMessage) {
@@ -358,6 +360,7 @@ func (o *oscParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to oscParams")
 		return
 	}
+	o.enabled = j.Enabled
 	o.kind = waveKindFromString(j.Kind)
 	o.octave = j.Octave
 	o.coarse = j.Coarse
@@ -366,15 +369,18 @@ func (o *oscParams) applyJSON(data json.RawMessage) {
 }
 func (o *oscParams) toJSON() json.RawMessage {
 	return toRawMessage(&oscJSON{
-		Kind:   waveKindToString(o.kind),
-		Octave: o.octave,
-		Coarse: o.coarse,
-		Fine:   o.fine,
-		Level:  o.level,
+		Enabled: o.enabled,
+		Kind:    waveKindToString(o.kind),
+		Octave:  o.octave,
+		Coarse:  o.coarse,
+		Fine:    o.fine,
+		Level:   o.level,
 	})
 }
 func (o *oscParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		o.enabled = value == "true"
 	case "kind":
 		o.kind = waveKindFromString(value)
 	case "octave":
@@ -406,6 +412,7 @@ func (o *oscParams) set(key string, value string) error {
 }
 
 type osc struct {
+	enabled   bool
 	kind      int
 	glideTime int // ms
 	freq      float64
@@ -768,17 +775,20 @@ EOF
 // ----- Filter ----- //
 
 type filterParams struct {
-	kind int
-	freq float64
-	q    float64
-	gain float64
-	N    int
+	enabled bool
+	kind    int
+	freq    float64
+	q       float64
+	gain    float64
+	N       int
 }
+
 type filterJSON struct {
-	Kind string  `json:"kind"`
-	Freq float64 `json:"freq"`
-	Q    float64 `json:"q"`
-	Gain float64 `json:"gain"`
+	Enabled bool    `json:"enabled"`
+	Kind    string  `json:"kind"`
+	Freq    float64 `json:"freq"`
+	Q       float64 `json:"q"`
+	Gain    float64 `json:"gain"`
 }
 
 func (f *filterParams) applyJSON(data json.RawMessage) {
@@ -788,6 +798,7 @@ func (f *filterParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to filter")
 		return
 	}
+	f.enabled = j.Enabled
 	f.kind = filterKindFromString(j.Kind)
 	f.freq = j.Freq
 	f.q = j.Q
@@ -795,14 +806,17 @@ func (f *filterParams) applyJSON(data json.RawMessage) {
 }
 func (f *filterParams) toJSON() json.RawMessage {
 	return toRawMessage(&filterJSON{
-		Kind: filterKindToString(f.kind),
-		Freq: f.freq,
-		Q:    f.q,
-		Gain: f.gain,
+		Enabled: f.enabled,
+		Kind:    filterKindToString(f.kind),
+		Freq:    f.freq,
+		Q:       f.q,
+		Gain:    f.gain,
 	})
 }
 func (f *filterParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		f.enabled = value == "true"
 	case "kind":
 		f.kind = filterKindFromString(value)
 	case "freq":
@@ -828,12 +842,13 @@ func (f *filterParams) set(key string, value string) error {
 }
 
 type filter struct {
-	freq float64
-	q    float64
-	gain float64
-	a    []float64 // feedforward
-	b    []float64 // feedback
-	past []float64
+	enabled bool
+	freq    float64
+	q       float64
+	gain    float64
+	a       []float64 // feedforward
+	b       []float64 // feedback
+	past    []float64
 }
 
 func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64, envelopes []*envelope) float64 {
@@ -966,12 +981,14 @@ func (d *delay) getDelayed() float64 {
 // ----- Echo ----- //
 
 type echoParams struct {
+	enabled      bool
 	delay        float64
 	feedbackGain float64
 	mix          float64
 }
 
 type echoJSON struct {
+	Enabled      bool    `json:"enabled"`
 	Delay        float64 `json:"delay"`
 	FeedbackGain float64 `json:"feedbackGain"`
 	Mix          float64 `json:"mix"`
@@ -984,12 +1001,14 @@ func (l *echoParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to echoParams")
 		return
 	}
+	l.enabled = j.Enabled
 	l.delay = j.Delay
 	l.feedbackGain = j.FeedbackGain
 	l.mix = j.Mix
 }
 func (l *echoParams) toJSON() json.RawMessage {
 	return toRawMessage(&echoJSON{
+		Enabled:      l.enabled,
 		Delay:        l.delay,
 		FeedbackGain: l.feedbackGain,
 		Mix:          l.mix,
@@ -997,6 +1016,8 @@ func (l *echoParams) toJSON() json.RawMessage {
 }
 func (l *echoParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		l.enabled = value == "true"
 	case "delay":
 		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
@@ -1020,12 +1041,14 @@ func (l *echoParams) set(key string, value string) error {
 }
 
 type echo struct {
+	enabled      bool
 	delay        *delay
 	feedbackGain float64 // [0,1)
 	mix          float64 // [0,1]
 }
 
 func (e *echo) applyParams(p *echoParams) {
+	e.enabled = p.enabled
 	e.delay.applyParams(p.delay)
 	e.feedbackGain = p.feedbackGain
 	e.mix = p.mix
@@ -1073,6 +1096,7 @@ var destLfoAmount = [3]int{destLfo0Amount, destLfo1Amount, destLfo2Amount}
 // ----- Envelope ----- //
 
 type envelopeParams struct {
+	enabled     bool
 	destination int
 	delay       float64
 	attack      float64
@@ -1080,6 +1104,7 @@ type envelopeParams struct {
 }
 
 type envelopeJSON struct {
+	Enabled     bool    `json:"enabled"`
 	Destination string  `json:"destination"`
 	Delay       float64 `json:"delay"`
 	Attack      float64 `json:"attack"`
@@ -1093,6 +1118,7 @@ func (l *envelopeParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to envelopeParams")
 		return
 	}
+	l.enabled = j.Enabled
 	l.destination = destinationFromString(j.Destination)
 	l.delay = j.Delay
 	l.attack = j.Attack
@@ -1100,6 +1126,7 @@ func (l *envelopeParams) applyJSON(data json.RawMessage) {
 }
 func (l *envelopeParams) toJSON() json.RawMessage {
 	return toRawMessage(&envelopeJSON{
+		Enabled:     l.enabled,
 		Destination: destinationToString(l.destination),
 		Delay:       l.delay,
 		Attack:      l.attack,
@@ -1108,6 +1135,7 @@ func (l *envelopeParams) toJSON() json.RawMessage {
 }
 func newEnvelopeParams() *envelopeParams {
 	return &envelopeParams{
+		enabled:     false,
 		destination: destNone,
 		delay:       0,
 		attack:      0,
@@ -1116,6 +1144,8 @@ func newEnvelopeParams() *envelopeParams {
 }
 func (l *envelopeParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		l.enabled = value == "true"
 	case "destination":
 		l.destination = destinationFromString(value)
 	case "delay":
@@ -1168,12 +1198,14 @@ func (l *envelopeParams) set(key string, value string) error {
     |delay|attack|
 */
 type envelope struct {
+	enabled bool
 	*adsr
 	destination int
 }
 
 func newEnvelope() *envelope {
 	return &envelope{
+		enabled:     false,
 		destination: destNone,
 		adsr:        &adsr{},
 	}
@@ -1182,6 +1214,7 @@ func newEnvelope() *envelope {
 // ----- LFO ----- //
 
 type lfoParams struct {
+	enabled     bool
 	destination int
 	wave        int
 	freqType    string
@@ -1190,6 +1223,7 @@ type lfoParams struct {
 }
 
 type lfoJSON struct {
+	Enabled     bool    `json:"enabled"`
 	Destination string  `json:"destination"`
 	Wave        string  `json:"wave"`
 	FreqType    string  `json:"freqType"`
@@ -1204,6 +1238,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to adsrParams")
 		return
 	}
+	l.enabled = j.Enabled
 	l.destination = destinationFromString(j.Destination)
 	l.wave = waveKindFromString(j.Wave)
 	l.freqType = j.FreqType
@@ -1212,6 +1247,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 }
 func (l *lfoParams) toJSON() json.RawMessage {
 	return toRawMessage(&lfoJSON{
+		Enabled:     l.enabled,
 		Destination: destinationToString(l.destination),
 		Wave:        waveKindToString(l.wave),
 		FreqType:    l.freqType,
@@ -1222,6 +1258,7 @@ func (l *lfoParams) toJSON() json.RawMessage {
 
 func newLfoParams() *lfoParams {
 	return &lfoParams{
+		enabled:     false,
 		destination: destNone,
 		wave:        waveSine,
 		freqType:    "none",
@@ -1246,6 +1283,9 @@ func newLfoParams() *lfoParams {
 
 func (l *lfoParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		// l.initByDestination(value)
+		l.enabled = value == "true"
 	case "destination":
 		// l.initByDestination(value)
 		l.destination = destinationFromString(value)
@@ -1268,6 +1308,7 @@ func (l *lfoParams) set(key string, value string) error {
 }
 
 type lfo struct {
+	enabled     bool
 	destination int
 	freqType    string
 	amount      float64
@@ -1276,6 +1317,7 @@ type lfo struct {
 
 func newLfo() *lfo {
 	return &lfo{
+		enabled:     false,
 		destination: destNone,
 		freqType:    "none",
 		amount:      0,

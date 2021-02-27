@@ -8,20 +8,57 @@ import { Select } from "./select";
 import * as d from "./decoder";
 import { WaveSelect } from "./wave-select";
 
-const EditGroup = (o: { label: string; children: any }) => {
+const EditGroup = (o: {
+  enabled?: boolean;
+  label: string;
+  children: any;
+  canBypass?: boolean;
+  onChangeEnabled?: (value: boolean) => void;
+}) => {
+  const enabled = o.enabled ?? true;
+  const canBypass = o.canBypass ?? false;
+  const onClick = () => {
+    if (canBypass) {
+      o.onChangeEnabled?.(!enabled);
+    }
+  };
   return (
-    <div style={{ display: "flex", flexFlow: "column" }}>
-      <label
+    <div
+      style={{
+        display: "flex",
+        flexFlow: "column",
+      }}
+    >
+      <div
         style={{
-          display: "block",
+          display: "flex",
           borderBottom: "solid 1px #aaa",
-          textAlign: "center",
           whiteSpace: "nowrap",
+          alignItems: "center",
+          columnGap: "4px",
+        }}
+        onClick={onClick}
+      >
+        {o.canBypass ? (
+          <div
+            style={{
+              width: "8px",
+              height: "8px",
+              backgroundColor: enabled ? "rgb(153,119,255)" : "#222",
+              marginTop: "-1px",
+            }}
+          ></div>
+        ) : null}
+        <label>{o.label}</label>
+      </div>
+      <div
+        style={{
+          padding: "5px 0",
+          ...(enabled ? {} : { opacity: 0.2, pointerEvents: "none" }),
         }}
       >
-        {o.label}
-      </label>
-      <div style={{ padding: "5px 0" }}>{o.children}</div>
+        {o.children}
+      </div>
     </div>
   );
 };
@@ -57,6 +94,7 @@ const GlideTime = React.memo(
   }
 );
 type OSC = {
+  enabled: boolean;
   kind: string;
   octave: number;
   coarse: number;
@@ -69,6 +107,11 @@ const OSCGroup = React.memo(
     value: OSC;
     dispatch: React.Dispatch<ParamsAction>;
   }) => {
+    const onChangeEnabled = useCallbackWithIndex(
+      o.index,
+      (index: number, value: boolean) =>
+        o.dispatch({ type: "changedOscEnabled", index, value })
+    );
     const onChangeKind = useCallbackWithIndex(
       o.index,
       (index: number, value: string) =>
@@ -95,7 +138,12 @@ const OSCGroup = React.memo(
         o.dispatch({ type: "changedOscLevel", index, value })
     );
     return (
-      <EditGroup label={`OSC ${o.index + 1}`}>
+      <EditGroup
+        label={`OSC ${o.index + 1}`}
+        enabled={o.value.enabled}
+        canBypass={true}
+        onChangeEnabled={onChangeEnabled}
+      >
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
           <div style={{ textAlign: "center" }}>
             <OscKind value={o.value.kind} onChange={onChangeKind} />
@@ -436,12 +484,14 @@ lfoDestinations.set("filter_freq", {
   fromAmount: 0,
 });
 type LFO = {
+  enabled: boolean;
   destination: string;
   wave: string;
   freq: number;
   amount: number;
 };
 const defaultLFO = {
+  enabled: false,
   destination: "none",
   wave: "sine",
   freq: 0,
@@ -461,6 +511,11 @@ const LFOGroup = React.memo(
   }) => {
     const list = [...lfoDestinations.keys()];
     const destination = lfoDestinations.get(o.value.destination)!;
+    const onChangeEnabled = useCallbackWithIndex(
+      o.index,
+      (index: number, value: boolean) =>
+        o.dispatch({ type: "changedLFOEnabled", index, value })
+    );
     const onChangeDestination = useCallbackWithIndex(
       o.index,
       (index: number, value: string) =>
@@ -482,7 +537,12 @@ const LFOGroup = React.memo(
         o.dispatch({ type: "changedLFOAmount", index, value })
     );
     return (
-      <EditGroup label={`LFO ${o.index + 1}`}>
+      <EditGroup
+        label={`LFO ${o.index + 1}`}
+        enabled={o.value.enabled}
+        canBypass={true}
+        onChangeEnabled={onChangeEnabled}
+      >
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
           <Select
             list={list}
@@ -630,12 +690,14 @@ for (let i = 0; i < 3; i++) {
   });
 }
 type Envelope = {
+  enabled: boolean;
   destination: string;
   delay: number;
   attack: number;
   amount: number;
 };
 const defaultEnvelope: Envelope = {
+  enabled: false,
   destination: "none",
   delay: 0,
   attack: 0,
@@ -649,6 +711,11 @@ const EnvelopeGroup = React.memo(
   }) => {
     const list = [...envelopeDestinations.keys()];
     const destination = envelopeDestinations.get(o.value.destination)!;
+    const onChangeEnabled = useCallbackWithIndex(
+      o.index,
+      (index: number, value: boolean) =>
+        o.dispatch({ type: "changedEnvelopeEnabled", index, value })
+    );
     const onChangeDestination = useCallbackWithIndex(
       o.index,
       (index: number, value: string) =>
@@ -670,7 +737,12 @@ const EnvelopeGroup = React.memo(
         o.dispatch({ type: "changedEnvelopeAmount", index, value })
     );
     return (
-      <EditGroup label={`Envelope ${o.index + 1}`}>
+      <EditGroup
+        label={`Envelope ${o.index + 1}`}
+        enabled={o.value.enabled}
+        canBypass={true}
+        onChangeEnabled={onChangeEnabled}
+      >
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
           <Select
             list={list}
@@ -895,6 +967,7 @@ const paramsDecoder = d.object({
   glideTime: d.number(),
   oscs: d.array(
     d.object({
+      enabled: d.boolean,
       kind: d.string(),
       octave: d.number(),
       coarse: d.number(),
@@ -910,6 +983,7 @@ const paramsDecoder = d.object({
   }),
   lfos: d.array(
     d.object({
+      enabled: d.boolean,
       destination: d.string(),
       wave: d.string(),
       freq: d.number(),
@@ -918,6 +992,7 @@ const paramsDecoder = d.object({
   ),
   envelopes: d.array(
     d.object({
+      enabled: d.boolean,
       destination: d.string(),
       delay: d.number(),
       attack: d.number(),
@@ -925,12 +1000,14 @@ const paramsDecoder = d.object({
     })
   ),
   filter: d.object({
+    enabled: d.boolean,
     kind: d.string(),
     freq: d.number(),
     q: d.number(),
     gain: d.number(),
   }),
   echo: d.object({
+    enabled: d.boolean,
     delay: d.number(),
     feedbackGain: d.number(),
     mix: d.number(),
@@ -953,6 +1030,7 @@ type Action =
 type ParamsAction =
   | { type: "changedPoly"; value: string }
   | { type: "changedGlideTime"; value: number }
+  | { type: "changedOscEnabled"; index: number; value: boolean }
   | { type: "changedOscKind"; index: number; value: string }
   | { type: "changedOscOctave"; index: number; value: number }
   | { type: "changedOscCoarse"; index: number; value: number }
@@ -962,18 +1040,22 @@ type ParamsAction =
   | { type: "changedAdsrDecay"; value: number }
   | { type: "changedAdsrSustain"; value: number }
   | { type: "changedAdsrRelease"; value: number }
+  | { type: "changedLFOEnabled"; index: number; value: boolean }
   | { type: "changedLFODestination"; index: number; value: string }
   | { type: "changedLFOWave"; index: number; value: string }
   | { type: "changedLFOFreq"; index: number; value: number }
   | { type: "changedLFOAmount"; index: number; value: number }
+  | { type: "changedEnvelopeEnabled"; index: number; value: boolean }
   | { type: "changedEnvelopeDestination"; index: number; value: string }
   | { type: "changedEnvelopeDelay"; index: number; value: number }
   | { type: "changedEnvelopeAttack"; index: number; value: number }
   | { type: "changedEnvelopeAmount"; index: number; value: number }
+  | { type: "changedFilterEnabled"; value: boolean }
   | { type: "changedFilterKind"; value: string }
   | { type: "changedFilterFreq"; value: number }
   | { type: "changedFilterQ"; value: number }
   | { type: "changedFilterGain"; value: number }
+  | { type: "changedEchoEnabled"; value: boolean }
   | { type: "changedEchoDelay"; value: number }
   | { type: "changedEchoFeedbackGain"; value: number }
   | { type: "changedEchoMix"; value: number };
@@ -985,6 +1067,7 @@ const App = () => {
       glideTime: 100,
       oscs: [
         {
+          enabled: true,
           kind: "sine",
           octave: 0,
           coarse: 0,
@@ -992,6 +1075,7 @@ const App = () => {
           level: 1.0,
         },
         {
+          enabled: false,
           kind: "sine",
           octave: 0,
           coarse: 0,
@@ -1006,6 +1090,7 @@ const App = () => {
         release: 100,
       },
       filter: {
+        enabled: false,
         kind: "none",
         freq: 1000,
         q: 0,
@@ -1014,6 +1099,7 @@ const App = () => {
       lfos: [defaultLFO, defaultLFO, defaultLFO],
       envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],
       echo: {
+        enabled: false,
         delay: 100,
         feedbackGain: 0,
         mix: 0,
@@ -1024,7 +1110,7 @@ const App = () => {
       processTime: 0,
     },
   };
-  const paramsReducer = (state: Params, action: ParamsAction) => {
+  const paramsReducer = (state: Params, action: ParamsAction): Params => {
     switch (action.type) {
       case "changedPoly": {
         const { value } = action;
@@ -1035,6 +1121,20 @@ const App = () => {
         const { value } = action;
         ipcRenderer.send("audio", ["set", "glide_time", value]);
         return { ...state, glideTime: value };
+      }
+      case "changedOscEnabled": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "osc",
+          String(index),
+          "enabled",
+          String(value),
+        ]);
+        return {
+          ...state,
+          oscs: setItem(state.oscs, index, { enabled: value }),
+        };
       }
       case "changedOscKind": {
         const { index, value } = action;
@@ -1105,6 +1205,20 @@ const App = () => {
         ipcRenderer.send("audio", ["set", "adsr", "release", value]);
         return { ...state, adsr: { ...state.adsr, release: value } };
       }
+      case "changedLFOEnabled": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "lfo",
+          String(index),
+          "enabled",
+          String(value),
+        ]);
+        return {
+          ...state,
+          lfos: setItem(state.lfos, index, { enabled: value }),
+        };
+      }
       case "changedLFODestination": {
         const { index, value } = action;
         const { defaultFreq, defaultAmount } = lfoDestinations.get(value)!;
@@ -1166,6 +1280,20 @@ const App = () => {
         return {
           ...state,
           lfos: setItem(state.lfos, index, { amount: value }),
+        };
+      }
+      case "changedEnvelopeEnabled": {
+        const { index, value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "envelope",
+          String(index),
+          "enabled",
+          String(value),
+        ]);
+        return {
+          ...state,
+          envelopes: setItem(state.envelopes, index, { enabled: value }),
         };
       }
       case "changedEnvelopeDestination": {
@@ -1232,6 +1360,14 @@ const App = () => {
           }),
         };
       }
+      case "changedFilterEnabled": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "filter", "enabled", String(value)]);
+        return {
+          ...state,
+          filter: { ...state.filter, enabled: value },
+        };
+      }
       case "changedFilterKind": {
         const { value } = action;
         ipcRenderer.send("audio", ["set", "filter", "kind", value]);
@@ -1264,6 +1400,14 @@ const App = () => {
           filter: { ...state.filter, gain: value },
         };
       }
+      case "changedEchoEnabled": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "echo", "enabled", String(value)]);
+        return {
+          ...state,
+          echo: { ...state.echo, enabled: value },
+        };
+      }
       case "changedEchoDelay": {
         const { value } = action;
         ipcRenderer.send("audio", ["set", "echo", "delay", value]);
@@ -1290,28 +1434,31 @@ const App = () => {
       }
     }
   };
-  const [state, dispatch] = useReducer((state: State, action: Action) => {
-    switch (action.type) {
-      case "receivedCommand": {
-        const { command } = action;
-        if (command[0] === "all_params") {
-          const obj = JSON.parse(command[1]);
-          console.log(obj);
-          return { ...state, params: paramsDecoder.run(obj) };
+  const [state, dispatch] = useReducer(
+    (state: State, action: Action): State => {
+      switch (action.type) {
+        case "receivedCommand": {
+          const { command } = action;
+          if (command[0] === "all_params") {
+            const obj = JSON.parse(command[1]);
+            console.log(obj);
+            return { ...state, params: paramsDecoder.run(obj) };
+          }
+          if (command[0] === "status") {
+            const obj = JSON.parse(command[1]);
+            return { ...state, status: statusDecoder.run(obj) };
+          } else {
+            return state;
+          }
         }
-        if (command[0] === "status") {
-          const obj = JSON.parse(command[1]);
-          return { ...state, status: statusDecoder.run(obj) };
-        } else {
-          return state;
+        case "paramsAction": {
+          const { value } = action;
+          return { ...state, params: paramsReducer(state.params, value) };
         }
       }
-      case "paramsAction": {
-        const { value } = action;
-        return { ...state, params: paramsReducer(state.params, value) };
-      }
-    }
-  }, initialState);
+    },
+    initialState
+  );
   useEffect(() => {
     const callback = (_: any, command: string[]) => {
       dispatch({ type: "receivedCommand", command });
@@ -1327,6 +1474,18 @@ const App = () => {
     dispatch({
       type: "paramsAction",
       value: action,
+    });
+  };
+  const onChangeFilterEnabled = (value: boolean) => {
+    dispatchParam({
+      type: "changedFilterEnabled",
+      value,
+    });
+  };
+  const onChangeEchoEnabled = (value: boolean) => {
+    dispatchParam({
+      type: "changedEchoEnabled",
+      value,
     });
   };
   const p = state.params;
@@ -1350,7 +1509,12 @@ const App = () => {
             <Release value={p.adsr.release} dispatch={dispatchParam} />
           </div>
         </EditGroup>
-        <EditGroup label="FILTER">
+        <EditGroup
+          label="FILTER"
+          enabled={p.echo.enabled}
+          canBypass={true}
+          onChangeEnabled={onChangeFilterEnabled}
+        >
           <div style={{ display: "flex", gap: "12px" }}>
             <div>
               <FilterKind dispatch={dispatchParam} value={p.filter.kind} />
@@ -1380,7 +1544,12 @@ const App = () => {
           value={p.envelopes[2]}
           dispatch={dispatchParam}
         />
-        <EditGroup label="Echo">
+        <EditGroup
+          label="Echo"
+          enabled={p.echo.enabled}
+          canBypass={true}
+          onChangeEnabled={onChangeEchoEnabled}
+        >
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
             <EchoDelay value={p.echo.delay} dispatch={dispatchParam} />
             <EchoFeedbackGain
