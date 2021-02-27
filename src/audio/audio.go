@@ -51,15 +51,48 @@ func positiveMod(a float64, b float64) float64 {
 func noteToFreq(note int) float64 {
 	return baseFreq * math.Pow(2, float64(note-69)/12)
 }
+
+// func freqToNote(freq float64) int {
+// 	note := int(math.Log2(freq/baseFreq)*12.0) + 69
+// 	if note < 0 {
+// 		note = 0
+// 	}
+// 	if note >= 128 {
+// 		note = 127
+// 	}
+// 	return note
+// }
+
+var freqs = makeFreqs()
+
+func makeFreqs() []float64 {
+	freqs := make([]float64, 128)
+	for i := 0; i < 128; i++ {
+		freqs[i] = noteToFreq(i)
+	}
+	return freqs
+}
 func freqToNote(freq float64) int {
-	note := int(math.Log2(freq/baseFreq)*12.0) + 69
-	if note < 0 {
-		note = 0
+	low := 0
+	high := 128
+	if freq < freqs[low] {
+		return 0
 	}
-	if note >= 128 {
-		note = 127
+	if freq >= freqs[high-1] {
+		return high - 1
 	}
-	return note
+	for i := 0; i < 128; i++ {
+		curr := (low + high) / 2
+		if freq < freqs[curr] {
+			high = curr
+		} else {
+			low = curr
+		}
+		if high-low <= 1 {
+			return low
+		}
+	}
+	panic("infinite loop in freqToNote()")
 }
 func toRawMessage(v interface{}) json.RawMessage {
 	bytes, err := json.Marshal(v)
@@ -93,7 +126,7 @@ type monoOsc struct {
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
-			oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
+			oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
 			adsr:      &adsr{},
 			filter:    &filter{},
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -157,7 +190,8 @@ func (m *monoOsc) calc(
 				}
 			}
 		}
-		out[i] = echo.step(m.o.step(event, filterParams))
+		out[i] = m.o.step(event, filterParams)
+		out[i] = echo.step(out[i])
 	}
 }
 
@@ -179,7 +213,7 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
+				oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
 				adsr:      &adsr{},
 				filter:    &filter{},
 				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -299,6 +333,9 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	}
 	o.adsr.step()
 	for _, envelope := range o.envelopes {
+		if !envelope.enabled {
+			continue
+		}
 		envelope.step()
 	}
 	freqRatio := 1.0
@@ -309,6 +346,9 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		amountGain := 1.0
 		lfoFreqRatio := 1.0
 		for _, envelope := range o.envelopes {
+			if !envelope.enabled {
+				continue
+			}
 			if envelope.destination == destLfoAmount[lfoIndex] {
 				amountGain *= envelope.value
 			}
@@ -323,6 +363,9 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 		filterFreqRatio *= _filterFreqRatio
 	}
 	for _, envelope := range o.envelopes {
+		if !envelope.enabled {
+			continue
+		}
 		if envelope.destination == destFreq {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
@@ -331,24 +374,33 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	for _, osc := range o.oscs {
 		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 	}
-	return o.filter.processOneSample(value, filterParams, filterFreqRatio, o.envelopes)
+	// TODO
+	o.filter.enabled = filterParams.enabled
+	o.filter.kind = filterParams.kind
+	o.filter.freq = filterParams.freq
+	o.filter.q = filterParams.q
+	o.filter.gain = filterParams.gain
+	o.filter.N = filterParams.N
+	return o.filter.step(value, filterFreqRatio, o.envelopes)
 }
 
 // ----- OSC ----- //
 
 type oscParams struct {
-	kind   int
-	octave int     // -2 ~ 2
-	coarse int     // -12 ~ 12
-	fine   int     // -100 ~ 100 cent
-	level  float64 // 0 ~ 1
+	enabled bool
+	kind    int
+	octave  int     // -2 ~ 2
+	coarse  int     // -12 ~ 12
+	fine    int     // -100 ~ 100 cent
+	level   float64 // 0 ~ 1
 }
 type oscJSON struct {
-	Kind   string  `json:"kind"`
-	Octave int     `json:"octave"`
-	Coarse int     `json:"coarse"`
-	Fine   int     `json:"fine"`
-	Level  float64 `json:"level"`
+	Enabled bool    `json:"enabled"`
+	Kind    string  `json:"kind"`
+	Octave  int     `json:"octave"`
+	Coarse  int     `json:"coarse"`
+	Fine    int     `json:"fine"`
+	Level   float64 `json:"level"`
 }
 
 func (o *oscParams) applyJSON(data json.RawMessage) {
@@ -358,6 +410,7 @@ func (o *oscParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to oscParams")
 		return
 	}
+	o.enabled = j.Enabled
 	o.kind = waveKindFromString(j.Kind)
 	o.octave = j.Octave
 	o.coarse = j.Coarse
@@ -366,15 +419,18 @@ func (o *oscParams) applyJSON(data json.RawMessage) {
 }
 func (o *oscParams) toJSON() json.RawMessage {
 	return toRawMessage(&oscJSON{
-		Kind:   waveKindToString(o.kind),
-		Octave: o.octave,
-		Coarse: o.coarse,
-		Fine:   o.fine,
-		Level:  o.level,
+		Enabled: o.enabled,
+		Kind:    waveKindToString(o.kind),
+		Octave:  o.octave,
+		Coarse:  o.coarse,
+		Fine:    o.fine,
+		Level:   o.level,
 	})
 }
 func (o *oscParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		o.enabled = value == "true"
 	case "kind":
 		o.kind = waveKindFromString(value)
 	case "octave":
@@ -406,11 +462,12 @@ func (o *oscParams) set(key string, value string) error {
 }
 
 type osc struct {
+	enabled   bool
 	kind      int
 	glideTime int // ms
 	freq      float64
 	level     float64
-	phase01   float64
+	phase     float64
 	gliding   bool
 	shiftPos  float64
 	prevFreq  float64
@@ -422,23 +479,28 @@ var blsawWT *WavetableSet = loadWavetableSet("work/saw")
 
 func loadWavetableSet(path string) *WavetableSet {
 	wts := NewWavetableSet(128, 4096)
-	wts.Load(path)
+	err := wts.Load(path)
+	if err != nil {
+		panic(err)
+	}
 	return wts
 }
 func noteWithParamsToFreq(p *oscParams, note int) float64 {
 	return noteToFreq(note) * math.Pow(2, float64(p.octave)+float64(p.coarse)/12+float64(p.fine)/100/12)
 }
 func (o *osc) initWithNote(p *oscParams, note int) {
+	o.enabled = p.enabled
 	o.kind = p.kind
 	o.freq = noteWithParamsToFreq(p, note)
 	o.level = p.level
-	o.phase01 = rand.Float64()
+	o.phase = rand.Float64() * 2.0 * math.Pi
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	nextFreq := noteWithParamsToFreq(p, note)
 	if math.Abs(nextFreq-o.freq) < 0.001 {
 		return
 	}
+	o.enabled = p.enabled
 	o.glideTime = glideTime
 	o.prevFreq = o.freq
 	o.nextFreq = nextFreq
@@ -446,19 +508,24 @@ func (o *osc) glide(p *oscParams, note int, glideTime int) {
 	o.shiftPos = 0
 }
 func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
+	if !o.enabled {
+		return 0.0
+	}
 	freq := o.freq * freqRatio
-	p := positiveMod(o.phase01+phaseShift/(2.0*math.Pi), 1)
+	phase := o.phase + phaseShift
 	value := 0.0
 	switch o.kind {
 	case waveSine:
-		value = math.Sin(2 * math.Pi * p)
+		value = math.Sin(phase)
 	case waveTriangle:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		if p < 0.5 {
 			value = p*4 - 1
 		} else {
 			value = p*(-4) + 3
 		}
 	case waveSquare:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		if p < 0.5 {
 			value = 1
 		} else {
@@ -466,25 +533,27 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 		}
 	case waveSquareWT:
 		note := freqToNote(freq)
-		value = blsquareWT.tables[note].getAtPhase(2.0 * math.Pi * p)
+		value = blsquareWT.tables[note].getAtPhase(phase)
 	case wavePulse:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		if p < 0.25 {
 			value = 1
 		} else {
 			value = -1
 		}
 	case waveSaw:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		value = p*2 - 1
 	case waveSawWT:
 		note := freqToNote(freq)
-		value = blsawWT.tables[note].getAtPhase(2.0 * math.Pi * p)
+		value = blsawWT.tables[note].getAtPhase(phase)
 	case waveSawRev:
+		p := positiveMod(phase/(2.0*math.Pi), 1)
 		value = p*(-2) + 1
 	case waveNoise:
 		value = rand.Float64()*2 - 1
 	}
-	o.phase01 += freq / float64(sampleRate)
-	_, o.phase01 = math.Modf(o.phase01)
+	o.phase += 2.0 * math.Pi * freq / float64(sampleRate)
 	if o.gliding {
 		o.shiftPos++
 		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
@@ -768,17 +837,20 @@ EOF
 // ----- Filter ----- //
 
 type filterParams struct {
-	kind int
-	freq float64
-	q    float64
-	gain float64
-	N    int
+	enabled bool
+	kind    int
+	freq    float64
+	q       float64
+	gain    float64
+	N       int
 }
+
 type filterJSON struct {
-	Kind string  `json:"kind"`
-	Freq float64 `json:"freq"`
-	Q    float64 `json:"q"`
-	Gain float64 `json:"gain"`
+	Enabled bool    `json:"enabled"`
+	Kind    string  `json:"kind"`
+	Freq    float64 `json:"freq"`
+	Q       float64 `json:"q"`
+	Gain    float64 `json:"gain"`
 }
 
 func (f *filterParams) applyJSON(data json.RawMessage) {
@@ -788,6 +860,7 @@ func (f *filterParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to filter")
 		return
 	}
+	f.enabled = j.Enabled
 	f.kind = filterKindFromString(j.Kind)
 	f.freq = j.Freq
 	f.q = j.Q
@@ -795,14 +868,17 @@ func (f *filterParams) applyJSON(data json.RawMessage) {
 }
 func (f *filterParams) toJSON() json.RawMessage {
 	return toRawMessage(&filterJSON{
-		Kind: filterKindToString(f.kind),
-		Freq: f.freq,
-		Q:    f.q,
-		Gain: f.gain,
+		Enabled: f.enabled,
+		Kind:    filterKindToString(f.kind),
+		Freq:    f.freq,
+		Q:       f.q,
+		Gain:    f.gain,
 	})
 }
 func (f *filterParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		f.enabled = value == "true"
 	case "kind":
 		f.kind = filterKindFromString(value)
 	case "freq":
@@ -828,18 +904,27 @@ func (f *filterParams) set(key string, value string) error {
 }
 
 type filter struct {
-	freq float64
-	q    float64
-	gain float64
-	a    []float64 // feedforward
-	b    []float64 // feedback
-	past []float64
+	enabled bool
+	kind    int
+	freq    float64
+	q       float64
+	gain    float64
+	N       int
+	a       []float64 // feedforward
+	b       []float64 // feedback
+	past    []float64
 }
 
-func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64, envelopes []*envelope) float64 {
+func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) float64 {
+	if !f.enabled {
+		return in
+	}
 	qExponent := 1.0
 	gainRatio := 1.0
 	for _, envelope := range envelopes {
+		if !envelope.enabled {
+			continue
+		}
 		if envelope.destination == destFilterFreq {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
@@ -850,7 +935,7 @@ func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64
 			gainRatio *= envelope.value
 		}
 	}
-	f.a, f.b = makeH(f.a, f.b, p, freqRatio, qExponent, gainRatio)
+	f.a, f.b = makeH(f.a, f.b, f.kind, f.N, f.freq*freqRatio, math.Pow(f.q, qExponent), f.gain*gainRatio)
 	pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
 	if len(f.past) < pastLength {
 		f.past = make([]float64, pastLength)
@@ -860,19 +945,18 @@ func (f *filter) processOneSample(in float64, p *filterParams, freqRatio float64
 func makeH(
 	feedforward []float64,
 	feedback []float64,
-	f *filterParams,
-	freqRatio float64,
-	qExponent float64,
-	gainRatio float64,
+	kind int,
+	N int,
+	freq float64,
+	q float64,
+	gain float64,
 ) ([]float64, []float64) {
-	fc := f.freq * freqRatio / sampleRate
-	q := math.Pow(f.q, qExponent)
-	gain := f.gain * gainRatio
-	switch f.kind {
+	fc := freq / sampleRate
+	switch kind {
 	case filterLowPassFIR:
-		return makeFIRLowpassH(feedforward, feedback, f.N, fc, hamming)
+		return makeFIRLowpassH(feedforward, feedback, N, fc, hamming)
 	case filterHighPassFIR:
-		return makeFIRHighpassH(feedforward, feedback, f.N, fc, hamming)
+		return makeFIRHighpassH(feedforward, feedback, N, fc, hamming)
 	case filterLowPass:
 		return makeBiquadLowpassH(feedforward, feedback, fc, q)
 	case filterHighPass:
@@ -941,6 +1025,9 @@ type delay struct {
 }
 
 func (d *delay) applyParams(millis float64) {
+	if millis < 10 {
+		millis = 10
+	}
 	length := int(sampleRate * millis / 1000)
 	if cap(d.past) >= length {
 		d.past = d.past[0:length]
@@ -966,12 +1053,14 @@ func (d *delay) getDelayed() float64 {
 // ----- Echo ----- //
 
 type echoParams struct {
+	enabled      bool
 	delay        float64
 	feedbackGain float64
 	mix          float64
 }
 
 type echoJSON struct {
+	Enabled      bool    `json:"enabled"`
 	Delay        float64 `json:"delay"`
 	FeedbackGain float64 `json:"feedbackGain"`
 	Mix          float64 `json:"mix"`
@@ -984,12 +1073,14 @@ func (l *echoParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to echoParams")
 		return
 	}
+	l.enabled = j.Enabled
 	l.delay = j.Delay
 	l.feedbackGain = j.FeedbackGain
 	l.mix = j.Mix
 }
 func (l *echoParams) toJSON() json.RawMessage {
 	return toRawMessage(&echoJSON{
+		Enabled:      l.enabled,
 		Delay:        l.delay,
 		FeedbackGain: l.feedbackGain,
 		Mix:          l.mix,
@@ -997,6 +1088,8 @@ func (l *echoParams) toJSON() json.RawMessage {
 }
 func (l *echoParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		l.enabled = value == "true"
 	case "delay":
 		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
@@ -1020,19 +1113,21 @@ func (l *echoParams) set(key string, value string) error {
 }
 
 type echo struct {
+	enabled      bool
 	delay        *delay
 	feedbackGain float64 // [0,1)
 	mix          float64 // [0,1]
 }
 
 func (e *echo) applyParams(p *echoParams) {
+	e.enabled = p.enabled
 	e.delay.applyParams(p.delay)
 	e.feedbackGain = p.feedbackGain
 	e.mix = p.mix
 }
 
 func (e *echo) step(in float64) float64 {
-	if len(e.delay.past) == 0 {
+	if !e.enabled {
 		return in
 	}
 	delayed := e.delay.getDelayed()
@@ -1073,6 +1168,7 @@ var destLfoAmount = [3]int{destLfo0Amount, destLfo1Amount, destLfo2Amount}
 // ----- Envelope ----- //
 
 type envelopeParams struct {
+	enabled     bool
 	destination int
 	delay       float64
 	attack      float64
@@ -1080,6 +1176,7 @@ type envelopeParams struct {
 }
 
 type envelopeJSON struct {
+	Enabled     bool    `json:"enabled"`
 	Destination string  `json:"destination"`
 	Delay       float64 `json:"delay"`
 	Attack      float64 `json:"attack"`
@@ -1093,6 +1190,7 @@ func (l *envelopeParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to envelopeParams")
 		return
 	}
+	l.enabled = j.Enabled
 	l.destination = destinationFromString(j.Destination)
 	l.delay = j.Delay
 	l.attack = j.Attack
@@ -1100,6 +1198,7 @@ func (l *envelopeParams) applyJSON(data json.RawMessage) {
 }
 func (l *envelopeParams) toJSON() json.RawMessage {
 	return toRawMessage(&envelopeJSON{
+		Enabled:     l.enabled,
 		Destination: destinationToString(l.destination),
 		Delay:       l.delay,
 		Attack:      l.attack,
@@ -1108,6 +1207,7 @@ func (l *envelopeParams) toJSON() json.RawMessage {
 }
 func newEnvelopeParams() *envelopeParams {
 	return &envelopeParams{
+		enabled:     false,
 		destination: destNone,
 		delay:       0,
 		attack:      0,
@@ -1116,6 +1216,8 @@ func newEnvelopeParams() *envelopeParams {
 }
 func (l *envelopeParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		l.enabled = value == "true"
 	case "destination":
 		l.destination = destinationFromString(value)
 	case "delay":
@@ -1168,12 +1270,14 @@ func (l *envelopeParams) set(key string, value string) error {
     |delay|attack|
 */
 type envelope struct {
+	enabled bool
 	*adsr
 	destination int
 }
 
 func newEnvelope() *envelope {
 	return &envelope{
+		enabled:     false,
 		destination: destNone,
 		adsr:        &adsr{},
 	}
@@ -1182,6 +1286,7 @@ func newEnvelope() *envelope {
 // ----- LFO ----- //
 
 type lfoParams struct {
+	enabled     bool
 	destination int
 	wave        int
 	freqType    string
@@ -1190,6 +1295,7 @@ type lfoParams struct {
 }
 
 type lfoJSON struct {
+	Enabled     bool    `json:"enabled"`
 	Destination string  `json:"destination"`
 	Wave        string  `json:"wave"`
 	FreqType    string  `json:"freqType"`
@@ -1204,6 +1310,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to adsrParams")
 		return
 	}
+	l.enabled = j.Enabled
 	l.destination = destinationFromString(j.Destination)
 	l.wave = waveKindFromString(j.Wave)
 	l.freqType = j.FreqType
@@ -1212,6 +1319,7 @@ func (l *lfoParams) applyJSON(data json.RawMessage) {
 }
 func (l *lfoParams) toJSON() json.RawMessage {
 	return toRawMessage(&lfoJSON{
+		Enabled:     l.enabled,
 		Destination: destinationToString(l.destination),
 		Wave:        waveKindToString(l.wave),
 		FreqType:    l.freqType,
@@ -1222,6 +1330,7 @@ func (l *lfoParams) toJSON() json.RawMessage {
 
 func newLfoParams() *lfoParams {
 	return &lfoParams{
+		enabled:     false,
 		destination: destNone,
 		wave:        waveSine,
 		freqType:    "none",
@@ -1246,6 +1355,9 @@ func newLfoParams() *lfoParams {
 
 func (l *lfoParams) set(key string, value string) error {
 	switch key {
+	case "enabled":
+		// l.initByDestination(value)
+		l.enabled = value == "true"
 	case "destination":
 		// l.initByDestination(value)
 		l.destination = destinationFromString(value)
@@ -1268,6 +1380,7 @@ func (l *lfoParams) set(key string, value string) error {
 }
 
 type lfo struct {
+	enabled     bool
 	destination int
 	freqType    string
 	amount      float64
@@ -1276,14 +1389,16 @@ type lfo struct {
 
 func newLfo() *lfo {
 	return &lfo{
+		enabled:     false,
 		destination: destNone,
 		freqType:    "none",
 		amount:      0,
-		osc:         &osc{phase01: rand.Float64(), level: 1.0},
+		osc:         &osc{phase: rand.Float64() * 2.0 * math.Pi, level: 1.0},
 	}
 }
 
 func (l *lfo) applyParams(p *lfoParams) {
+	l.enabled = p.enabled
 	l.destination = p.destination
 	l.osc.kind = p.wave
 	l.freqType = p.freqType
@@ -1296,6 +1411,9 @@ func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float
 	phaseShift := 0.0
 	ampRatio := 1.0
 	filterFreqRatio := 1.0
+	if !l.enabled {
+		return freqRatio, phaseShift, ampRatio, filterFreqRatio
+	}
 	switch l.destination {
 	case destVibrato:
 		amount := l.amount * amountGain
@@ -1760,7 +1878,19 @@ var filterShapeFeedback = []float64{}
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	filterShapeFeedforward, filterShapeFeedback := makeH(filterShapeFeedforward, filterShapeFeedback, a.state.filterParams, 1.0, 1.0, 1.0)
+	kind := a.state.filterParams.kind
+	if !a.state.filterParams.enabled {
+		kind = filterNone
+	}
+	filterShapeFeedforward, filterShapeFeedback := makeH(
+		filterShapeFeedforward,
+		filterShapeFeedback,
+		kind,
+		a.state.filterParams.N,
+		a.state.filterParams.freq,
+		a.state.filterParams.q,
+		a.state.filterParams.gain,
+	)
 	a.state.Unlock()
 	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
 }
