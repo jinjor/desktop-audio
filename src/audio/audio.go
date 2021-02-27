@@ -93,7 +93,7 @@ type monoOsc struct {
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
-			osc:       &osc{phase01: rand.Float64()},
+			oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
 			adsr:      &adsr{},
 			filter:    &filter{},
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -105,7 +105,7 @@ func newMonoOsc() *monoOsc {
 
 func (m *monoOsc) calc(
 	events [][]*midiEvent,
-	oscParams *oscParams,
+	oscParams []*oscParams,
 	adsrParams *adsrParams,
 	filterParams *filterParams,
 	lfoParams []*lfoParams,
@@ -134,10 +134,10 @@ func (m *monoOsc) calc(
 					}
 					m.activeNotes[0] = data.note
 					if len(m.activeNotes) == 1 {
-						m.o.osc.initWithNote(oscParams, data.note)
+						m.o.initWithNote(oscParams, data.note)
 						event = enumNoteOn
 					} else {
-						m.o.osc.glide(oscParams, m.activeNotes[0], glideTime)
+						m.o.glide(oscParams, m.activeNotes[0], glideTime)
 					}
 				}
 			case *noteOff:
@@ -151,7 +151,7 @@ func (m *monoOsc) calc(
 				}
 				m.activeNotes = m.activeNotes[:len(m.activeNotes)-removed]
 				if len(m.activeNotes) > 0 {
-					m.o.osc.glide(oscParams, m.activeNotes[0], glideTime)
+					m.o.glide(oscParams, m.activeNotes[0], glideTime)
 				} else {
 					event = enumNoteOff
 				}
@@ -179,7 +179,7 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				osc:       &osc{phase01: rand.Float64()},
+				oscs:      []*osc{{phase01: rand.Float64()}, {phase01: rand.Float64()}},
 				adsr:      &adsr{},
 				filter:    &filter{},
 				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
@@ -194,7 +194,7 @@ func newPolyOsc() *polyOsc {
 
 func (p *polyOsc) calc(
 	events [][]*midiEvent,
-	oscParams *oscParams,
+	oscParams []*oscParams,
 	adsrParams *adsrParams,
 	filterParams *filterParams,
 	lfoParams []*lfoParams,
@@ -213,7 +213,7 @@ func (p *polyOsc) calc(
 					p.pooled = p.pooled[:lenPooled-1]
 					p.active = append(p.active, o)
 					o.note = data.note
-					o.osc.initWithNote(oscParams, data.note)
+					o.initWithNote(oscParams, data.note)
 					o.adsr.init(adsrParams)
 				} else {
 					log.Println("maxPoly exceeded")
@@ -260,7 +260,7 @@ func (p *polyOsc) calc(
 // ----- DECORATED OSC ----- //
 
 type decoratedOsc struct {
-	osc       *osc
+	oscs      []*osc
 	adsr      *adsr
 	filter    *filter
 	lfos      []*lfo
@@ -273,6 +273,16 @@ const (
 	enumNoteOff
 )
 
+func (o *decoratedOsc) initWithNote(p []*oscParams, note int) {
+	for i, osc := range o.oscs {
+		osc.initWithNote(p[i], note)
+	}
+}
+func (o *decoratedOsc) glide(p []*oscParams, note int, glideTime int) {
+	for i, osc := range o.oscs {
+		osc.glide(p[i], note, glideTime)
+	}
+}
 func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	switch event {
 	case enumNoEvent:
@@ -306,7 +316,7 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 				lfoFreqRatio *= math.Pow(16.0, envelope.value)
 			}
 		}
-		_freqRatio, _phaseShift, _ampRatio, _filterFreqRatio := lfo.step(o.osc, amountGain, lfoFreqRatio)
+		_freqRatio, _phaseShift, _ampRatio, _filterFreqRatio := lfo.step(o.oscs[0], amountGain, lfoFreqRatio) // TODO
 		freqRatio *= _freqRatio
 		phaseShift += _phaseShift
 		ampRatio *= _ampRatio
@@ -317,7 +327,10 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 			freqRatio *= math.Pow(16.0, envelope.value)
 		}
 	}
-	value := o.osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+	value := 0.0
+	for _, osc := range o.oscs {
+		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+	}
 	return o.filter.processOneSample(value, filterParams, filterFreqRatio, o.envelopes)
 }
 
@@ -325,15 +338,17 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 
 type oscParams struct {
 	kind   int
-	octave int // -2 ~ 2
-	coarse int // -12 ~ 12
-	fine   int // -100 ~ 100 cent
+	octave int     // -2 ~ 2
+	coarse int     // -12 ~ 12
+	fine   int     // -100 ~ 100 cent
+	level  float64 // 0 ~ 1
 }
 type oscJSON struct {
-	Kind   string `json:"kind"`
-	Octave int    `json:"octave"`
-	Coarse int    `json:"coarse"`
-	Fine   int    `json:"fine"`
+	Kind   string  `json:"kind"`
+	Octave int     `json:"octave"`
+	Coarse int     `json:"coarse"`
+	Fine   int     `json:"fine"`
+	Level  float64 `json:"level"`
 }
 
 func (o *oscParams) applyJSON(data json.RawMessage) {
@@ -347,6 +362,7 @@ func (o *oscParams) applyJSON(data json.RawMessage) {
 	o.octave = j.Octave
 	o.coarse = j.Coarse
 	o.fine = j.Fine
+	o.level = j.Level
 }
 func (o *oscParams) toJSON() json.RawMessage {
 	return toRawMessage(&oscJSON{
@@ -354,6 +370,7 @@ func (o *oscParams) toJSON() json.RawMessage {
 		Octave: o.octave,
 		Coarse: o.coarse,
 		Fine:   o.fine,
+		Level:  o.level,
 	})
 }
 func (o *oscParams) set(key string, value string) error {
@@ -378,6 +395,12 @@ func (o *oscParams) set(key string, value string) error {
 			return err
 		}
 		o.fine = int(value)
+	case "level":
+		value, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		o.level = value
 	}
 	return nil
 }
@@ -386,6 +409,7 @@ type osc struct {
 	kind      int
 	glideTime int // ms
 	freq      float64
+	level     float64
 	phase01   float64
 	gliding   bool
 	shiftPos  float64
@@ -407,6 +431,7 @@ func noteWithParamsToFreq(p *oscParams, note int) float64 {
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.kind = p.kind
 	o.freq = noteWithParamsToFreq(p, note)
+	o.level = p.level
 	o.phase01 = rand.Float64()
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
@@ -469,7 +494,7 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 			o.gliding = false
 		}
 	}
-	return value
+	return value * o.level
 }
 
 // ----- Wave Kind ----- //
@@ -1254,7 +1279,7 @@ func newLfo() *lfo {
 		destination: destNone,
 		freqType:    "none",
 		amount:      0,
-		osc:         &osc{phase01: rand.Float64()},
+		osc:         &osc{phase01: rand.Float64(), level: 1.0},
 	}
 }
 
@@ -1329,7 +1354,7 @@ func (c *Changes) Delete(key string) {
 type state struct {
 	sync.Mutex
 	events         [][]*midiEvent // length: samplesPerCycle * 2
-	oscParams      *oscParams
+	oscParams      []*oscParams
 	adsrParams     *adsrParams
 	lfoParams      []*lfoParams
 	filterParams   *filterParams
@@ -1348,7 +1373,7 @@ type state struct {
 type stateJSON struct {
 	Poly      string            `json:"poly"`
 	GlideTime int               `json:"glideTime"`
-	Osc       json.RawMessage   `json:"osc"`
+	Oscs      []json.RawMessage `json:"oscs"`
 	Adsr      json.RawMessage   `json:"adsr"`
 	Lfos      []json.RawMessage `json:"lfos"`
 	Envelopes []json.RawMessage `json:"envelopes"`
@@ -1360,12 +1385,20 @@ func (s *state) applyJSON(data json.RawMessage) {
 	var j stateJSON
 	err := json.Unmarshal(data, &j)
 	if err != nil {
+		log.Println(err)
+		log.Println(data)
 		log.Println("failed to apply JSON to state")
 		return
 	}
 	s.polyMode = j.Poly == "poly"
 	s.glideTime = j.GlideTime
-	s.oscParams.applyJSON(j.Osc)
+	if len(j.Oscs) == len(s.oscParams) {
+		for i, j := range j.Oscs {
+			s.oscParams[i].applyJSON(j)
+		}
+	} else {
+		log.Println("failed to apply JSON to osc params")
+	}
 	s.adsrParams.applyJSON(j.Adsr)
 	s.filterParams.applyJSON(j.Filter)
 	if len(j.Lfos) == len(s.lfoParams) {
@@ -1385,6 +1418,10 @@ func (s *state) applyJSON(data json.RawMessage) {
 	s.echoParams.applyJSON(j.Echo)
 }
 func (s *state) toJSON() json.RawMessage {
+	oscJsons := make([]json.RawMessage, len(s.oscParams))
+	for i, oscParam := range s.oscParams {
+		oscJsons[i] = oscParam.toJSON()
+	}
 	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
 	for i, lfoParam := range s.lfoParams {
 		lfoJsons[i] = lfoParam.toJSON()
@@ -1400,7 +1437,7 @@ func (s *state) toJSON() json.RawMessage {
 	return toRawMessage(&stateJSON{
 		Poly:      poly,
 		GlideTime: s.glideTime,
-		Osc:       s.oscParams.toJSON(),
+		Oscs:      oscJsons,
 		Adsr:      s.adsrParams.toJSON(),
 		Lfos:      lfoJsons,
 		Envelopes: envelopeJsons,
@@ -1412,7 +1449,7 @@ func (s *state) toJSON() json.RawMessage {
 func newState() *state {
 	return &state{
 		events:         make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:      &oscParams{kind: waveSine},
+		oscParams:      []*oscParams{{kind: waveSine, level: 1.0}, {kind: waveSine, level: 1.0}},
 		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
 		filterParams:   &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
@@ -1587,10 +1624,15 @@ func (a *Audio) update(command []string) error {
 			a.state.glideTime = int(value)
 		case "osc":
 			command = command[1:]
+			index, err := strconv.ParseInt(command[0], 10, 64)
+			if err != nil {
+				return err
+			}
+			command = command[1:]
 			if len(command) != 2 {
 				return fmt.Errorf("invalid key-value pair %v", command)
 			}
-			err := a.state.oscParams.set(command[0], command[1])
+			err = a.state.oscParams[index].set(command[0], command[1])
 			if err != nil {
 				return err
 			}
