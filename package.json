@@ -11,7 +11,7 @@
     "build:audio": "go build -o dist/audio src/main.go",
     "build:ui": "tsc",
     "test": "run-s test:*",
-    "test:go": "./go-test.sh -v ./src/audio",
+    "test:go": "./go-test.sh",
     "test:ts": "npm run build"
   },
   "author": "jinjor",

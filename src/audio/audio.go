@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -474,11 +475,16 @@ type osc struct {
 	nextFreq  float64
 }
 
-var blsquareWT *WavetableSet = loadWavetableSet("work/square")
-var blsawWT *WavetableSet = loadWavetableSet("work/saw")
+var blsquareWT *WavetableSet = loadWavetableSet("square")
+var blsawWT *WavetableSet = loadWavetableSet("saw")
 
 func loadWavetableSet(path string) *WavetableSet {
 	wts := NewWavetableSet(128, 4096)
+	if os.Getenv("AUDIO_TESTING") == "1" {
+		path = "../../work/" + path
+	} else {
+		path = "work/" + path
+	}
 	err := wts.Load(path)
 	if err != nil {
 		panic(err)
