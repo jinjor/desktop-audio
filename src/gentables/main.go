@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"math"
+	"os"
 
 	"github.com/jinjor/desktop-audio/src/audio"
 	"golang.org/x/sync/errgroup"
@@ -20,6 +21,8 @@ func main() {
 		panic("dir is not passed")
 	}
 	log.SetFlags(log.Lshortfile)
+
+	os.MkdirAll(dir, os.ModePerm)
 
 	ctx := context.Background()
 	g, ctx := errgroup.WithContext(ctx)
