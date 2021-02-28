@@ -16,8 +16,8 @@ func TestBenchmark(t *testing.T) {
 	times := 1000
 
 	audio, err := NewAudio()
-	defer expectNoError(t, audio.Close())
 	expectNoError(t, err)
+	defer expectNoError(t, audio.Close())
 	out := make([]byte, bufferSizeInBytes)
 	expectNoError(t, audio.update([]string{"poly"}))
 	expectNoError(t, audio.update([]string{"set", "osc", "0", "enabled", "true"}))
