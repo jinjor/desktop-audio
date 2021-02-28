@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"math"
 	"os"
@@ -29,24 +30,24 @@ func main() {
 	g.Go(func() error {
 		wts := audio.NewWavetableSet(numTables, numSamples)
 		wts.MakeBandLimitedTablesForAllNotes(numSamples, calcPartialSquareAtPhase)
-		log.Println("generated square wave")
+		fmt.Println("generated square wave")
 		err := wts.Save(dir + "/square")
-		log.Println("saved square wave")
+		fmt.Println("saved square wave")
 		return err
 	})
 	g.Go(func() error {
 		wts := audio.NewWavetableSet(numTables, numSamples)
 		wts.MakeBandLimitedTablesForAllNotes(numSamples, calcPartialSawAtPhase)
-		log.Println("generated saw wave")
+		fmt.Println("generated saw wave")
 		err := wts.Save(dir + "/saw")
-		log.Println("saved saw wave")
+		fmt.Println("saved saw wave")
 		return err
 	})
 	err := g.Wait()
 	if err != nil {
-		log.Fatalf("error: %v\n", err)
+		panic(err)
 	}
-	log.Println("Successfully generated wavetables.")
+	fmt.Println("Successfully generated wavetables.")
 }
 
 func calcPartialSquareAtPhase(n int, phase float64) float64 {
