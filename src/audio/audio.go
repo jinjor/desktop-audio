@@ -486,7 +486,7 @@ func loadWavetableSet(path string) *WavetableSet {
 		path = "work/" + path
 	}
 	err := wts.Load(path)
-	if err != nil {
+	if err != nil && os.Getenv("WAVETABLE_GENERATION") != "1" {
 		panic(err)
 	}
 	return wts

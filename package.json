@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "generate-code": "go generate src/audio/audio.go",
-    "generate-wavetable": "go run src/gentables/main.go work",
+    "generate-wavetable": "env WAVETABLE_GENERATION=1 go run src/gentables/main.go work",
     "build": "run-p build:*",
     "build:audio": "go build -o dist/audio src/main.go",
     "build:ui": "tsc",
