@@ -5,7 +5,9 @@ on:
       - "*"
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+    env:
+      AUDIODEV: null
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v1
@@ -15,8 +17,6 @@ jobs:
         with:
           node-version: "14.x"
           registry-url: "https://npm.pkg.github.com"
-      - run: sudo apt update
-      - run: sudo apt install -y libasound2-dev
       - run: go install ./...
       - run: npm ci
       - run: npm run generate-code
