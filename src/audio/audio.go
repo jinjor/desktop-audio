@@ -156,6 +156,7 @@ func (m *monoOsc) calc(
 		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
 	}
 	m.o.adsr.setParams(adsrParams)
+	m.o.filter.applyParams(filterParams)
 	for i := int64(0); i < int64(len(out)); i++ {
 		event := enumNoEvent
 		for _, e := range events[i] {
@@ -191,7 +192,7 @@ func (m *monoOsc) calc(
 				}
 			}
 		}
-		out[i] = m.o.step(event, filterParams)
+		out[i] = m.o.step(event)
 		out[i] = echo.step(out[i])
 	}
 }
@@ -256,6 +257,7 @@ func (p *polyOsc) calc(
 			}
 		}
 		for _, o := range p.active {
+			o.filter.applyParams(filterParams)
 			for i, lfo := range o.lfos {
 				lfo.applyParams(lfoParams[i])
 			}
@@ -279,7 +281,7 @@ func (p *polyOsc) calc(
 					}
 				}
 			}
-			out[i] += o.step(event, filterParams)
+			out[i] += o.step(event)
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]
@@ -318,7 +320,7 @@ func (o *decoratedOsc) glide(p []*oscParams, note int, glideTime int) {
 		osc.glide(p[i], note, glideTime)
 	}
 }
-func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
+func (o *decoratedOsc) step(event int) float64 {
 	switch event {
 	case enumNoEvent:
 	case enumNoteOn:
@@ -375,13 +377,6 @@ func (o *decoratedOsc) step(event int, filterParams *filterParams) float64 {
 	for _, osc := range o.oscs {
 		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 	}
-	// TODO
-	o.filter.enabled = filterParams.enabled
-	o.filter.kind = filterParams.kind
-	o.filter.freq = filterParams.freq
-	o.filter.q = filterParams.q
-	o.filter.gain = filterParams.gain
-	o.filter.N = filterParams.N
 	return o.filter.step(value, filterFreqRatio, o.envelopes)
 }
 
@@ -921,6 +916,14 @@ type filter struct {
 	past    []float64
 }
 
+func (f *filter) applyParams(p *filterParams) {
+	f.enabled = p.enabled
+	f.kind = p.kind
+	f.freq = p.freq
+	f.q = p.q
+	f.gain = p.gain
+	f.N = p.N
+}
 func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) float64 {
 	if !f.enabled {
 		return in
