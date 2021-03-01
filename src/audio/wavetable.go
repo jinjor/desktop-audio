@@ -28,16 +28,13 @@ func (wt *wavetable) generate(samples int, phaseToValue func(phase float64) floa
 	return nil
 }
 func (wt *wavetable) getAtPhase(phase float64) float64 {
-	phase = positiveMod(phase, 2.0*math.Pi)
+	if phase < 0 {
+		phase += 2.0 * math.Pi
+	}
 	length := len(wt.values)
 	phasePerSample := 2.0 * math.Pi / float64(length)
-	index := int(phase / phasePerSample)
-	nextIndex := index + 1
-	if nextIndex >= length {
-		nextIndex = 0
-	}
-	mod := math.Mod(phase, phasePerSample)
-	return wt.values[index]*(1-mod) + wt.values[nextIndex]*mod
+	index := int(phase/phasePerSample) % length
+	return wt.values[index]
 }
 func (wt *wavetable) makeBandLimitedTableForGivenNumberOfPartials(samples int, partials int, calcFourierPartialAtPhase func(n int, phase float64) float64) {
 	wt.generate(samples, func(phase float64) float64 {
