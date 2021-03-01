@@ -318,6 +318,7 @@ func (o *decoratedOsc) applyParams(
 		lfo.applyParams(lfoParams[i])
 	}
 	for i, envelope := range o.envelopes {
+		envelope.enabled = envelopeParams[i].enabled
 		envelope.destination = envelopeParams[i].destination
 		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
 	}
@@ -1404,7 +1405,7 @@ func newLfo() *lfo {
 		destination: destNone,
 		freqType:    "none",
 		amount:      0,
-		osc:         &osc{phase: rand.Float64() * 2.0 * math.Pi, level: 1.0},
+		osc:         &osc{phase: rand.Float64() * 2.0 * math.Pi, level: 1.0, enabled: true},
 	}
 }
 
