@@ -148,15 +148,7 @@ func (m *monoOsc) calc(
 	echo *echo,
 	out []float64,
 ) {
-	for i, lfo := range m.o.lfos {
-		lfo.applyParams(lfoParams[i])
-	}
-	for i, envelope := range m.o.envelopes {
-		envelope.destination = envelopeParams[i].destination
-		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
-	}
-	m.o.adsr.setParams(adsrParams)
-	m.o.filter.applyParams(filterParams)
+	m.o.applyParams(oscParams, adsrParams, filterParams, lfoParams, envelopeParams)
 	for i := int64(0); i < int64(len(out)); i++ {
 		event := enumNoEvent
 		for _, e := range events[i] {
@@ -227,7 +219,6 @@ func newPolyOsc() *polyOsc {
 		pooled: pooled,
 	}
 }
-
 func (p *polyOsc) calc(
 	events [][]*midiEvent,
 	oscParams []*oscParams,
@@ -238,6 +229,9 @@ func (p *polyOsc) calc(
 	echo *echo,
 	out []float64,
 ) {
+	for _, o := range p.active {
+		o.applyParams(oscParams, adsrParams, filterParams, lfoParams, envelopeParams)
+	}
 	for i := int64(0); i < int64(len(out)); i++ {
 		events := events[i]
 		for j := 0; j < len(events); j++ {
@@ -251,19 +245,10 @@ func (p *polyOsc) calc(
 					o.note = data.note
 					o.initWithNote(oscParams, data.note)
 					o.adsr.init(adsrParams)
+					o.applyParams(oscParams, adsrParams, filterParams, lfoParams, envelopeParams)
 				} else {
 					log.Println("maxPoly exceeded")
 				}
-			}
-		}
-		for _, o := range p.active {
-			o.filter.applyParams(filterParams)
-			for i, lfo := range o.lfos {
-				lfo.applyParams(lfoParams[i])
-			}
-			for i, envelope := range o.envelopes {
-				envelope.destination = envelopeParams[i].destination
-				envelope.adsr.applyEnvelopeParams(envelopeParams[i])
 			}
 		}
 		out[i] = 0.0
@@ -318,6 +303,23 @@ func (o *decoratedOsc) initWithNote(p []*oscParams, note int) {
 func (o *decoratedOsc) glide(p []*oscParams, note int, glideTime int) {
 	for i, osc := range o.oscs {
 		osc.glide(p[i], note, glideTime)
+	}
+}
+func (o *decoratedOsc) applyParams(
+	oscParams []*oscParams,
+	adsrParams *adsrParams,
+	filterParams *filterParams,
+	lfoParams []*lfoParams,
+	envelopeParams []*envelopeParams,
+) {
+	o.adsr.setParams(adsrParams)
+	o.filter.applyParams(filterParams)
+	for i, lfo := range o.lfos {
+		lfo.applyParams(lfoParams[i])
+	}
+	for i, envelope := range o.envelopes {
+		envelope.destination = envelopeParams[i].destination
+		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
 	}
 }
 func (o *decoratedOsc) step(event int) float64 {
