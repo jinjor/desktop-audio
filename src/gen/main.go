@@ -7,13 +7,11 @@ import (
 	"go/format"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 )
 
-type Variables struct {
-	EnumDefinitions []*EnumDefinition
-}
 type EnumDefinition struct {
 	EnumName   string
 	EnumValues []*EnumValue
@@ -25,6 +23,7 @@ type EnumValue struct {
 
 func main() {
 	src := os.Getenv("GOFILE")
+	lineNum, err := strconv.ParseInt(os.Getenv("GOLINE"), 10, 64)
 	dest := os.Args[2]
 	fmt.Println("generating " + dest + " needed by " + src + " ...")
 
@@ -36,9 +35,15 @@ func main() {
 	scanner := bufio.NewScanner(file)
 	enumName := ""
 	enumValues := []*EnumValue{}
-	enumDefinitions := []*EnumDefinition{}
+	var enumDefinition *EnumDefinition
+
+	num := -1
 	for scanner.Scan() {
 		line := scanner.Text()
+		num++
+		if num < int(lineNum) {
+			continue
+		}
 		if strings.HasPrefix(line, "generate-enum") {
 			enumName = strings.SplitN(line, " ", 2)[1]
 			continue
@@ -47,13 +52,11 @@ func main() {
 			continue
 		}
 		if line == "EOF" {
-			enumDefinition := &EnumDefinition{
+			enumDefinition = &EnumDefinition{
 				EnumName:   enumName,
 				EnumValues: enumValues,
 			}
-			enumDefinitions = append(enumDefinitions, enumDefinition)
-			enumName = ""
-			enumValues = []*EnumValue{}
+			break
 		}
 		definition := strings.SplitN(line, " ", 2)
 		if len(definition) != 2 {
@@ -65,14 +68,15 @@ func main() {
 	if err = scanner.Err(); err != nil {
 		panic(err)
 	}
-
-	variables := Variables{EnumDefinitions: enumDefinitions}
+	if enumDefinition == nil {
+		panic("EOF not found")
+	}
 	tmpl, err := template.New("enums.go").Parse(fileTemplate)
 	if err != nil {
 		panic(err)
 	}
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, variables)
+	err = tmpl.Execute(&buf, enumDefinition)
 	if err != nil {
 		panic(err)
 	}
@@ -91,25 +95,22 @@ const fileTemplate = `
 
 package audio
 
-{{range $i, $v := .EnumDefinitions}}
-
 const (
-{{range $i, $v := $v.EnumValues}}
+{{range $i, $v := .EnumValues}}
 	{{$v.VariableName}}{{if not $i}} = iota{{end}}{{end}}
 )
 func {{.EnumName}}FromString(s string) int {
-	switch s { {{range $i, $v := $v.EnumValues}}
+	switch s { {{range $i, $v := .EnumValues}}
 	case "{{$v.SerializeName}}":
 		return {{$v.VariableName}}{{end}}
 	}
-	return {{(index $v.EnumValues 0).VariableName}}
+	return {{(index .EnumValues 0).VariableName}}
 }
 func {{.EnumName}}ToString(d int) string {
-	switch d { {{range $i, $v := $v.EnumValues}}
+	switch d { {{range $i, $v := .EnumValues}}
 	case {{$v.VariableName}}:
 		return "{{$v.SerializeName}}"{{end}}
 	}
-	return "{{(index $v.EnumValues 0).SerializeName}}"
+	return "{{(index .EnumValues 0).SerializeName}}"
 }
-{{end}}
 `

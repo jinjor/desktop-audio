@@ -1,9 +1,227 @@
 package audio
 
 import (
+	"encoding/json"
 	"log"
 	"math"
+	"strconv"
 )
+
+// ----- Filter Kind ----- //
+
+//go:generate go run ../gen/main.go -- filter_kind.gen.go
+/*
+generate-enum filterKind
+
+filterNone none
+filterLowPassFIR lowpass-fir
+filterHighPassFIR highpass-fir
+filterLowPass lowpass
+filterHighPass highpass
+filterBandPass1 bandpass-1
+filterBandPass2 bandpass-2
+filterNotch notch
+filterPeaking peaking
+filterLowShelf lowshelf
+filterHighShelf highshelf
+
+EOF
+*/
+
+// ----- Filter Params ----- //
+
+type filterParams struct {
+	enabled bool
+	kind    int
+	freq    float64
+	q       float64
+	gain    float64
+	N       int
+}
+
+type filterJSON struct {
+	Enabled bool    `json:"enabled"`
+	Kind    string  `json:"kind"`
+	Freq    float64 `json:"freq"`
+	Q       float64 `json:"q"`
+	Gain    float64 `json:"gain"`
+}
+
+func (f *filterParams) applyJSON(data json.RawMessage) {
+	var j filterJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to filter")
+		return
+	}
+	f.enabled = j.Enabled
+	f.kind = filterKindFromString(j.Kind)
+	f.freq = j.Freq
+	f.q = j.Q
+	f.gain = j.Gain
+}
+func (f *filterParams) toJSON() json.RawMessage {
+	return toRawMessage(&filterJSON{
+		Enabled: f.enabled,
+		Kind:    filterKindToString(f.kind),
+		Freq:    f.freq,
+		Q:       f.q,
+		Gain:    f.gain,
+	})
+}
+func (f *filterParams) set(key string, value string) error {
+	switch key {
+	case "enabled":
+		f.enabled = value == "true"
+	case "kind":
+		f.kind = filterKindFromString(value)
+	case "freq":
+		freq, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.freq = freq
+	case "q":
+		q, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.q = q
+	case "gain":
+		gain, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.gain = gain
+	}
+	return nil
+}
+
+// ----- Filter ----- //
+
+type filter struct {
+	enabled bool
+	kind    int
+	freq    float64
+	q       float64
+	gain    float64
+	N       int
+	a       []float64 // feedforward
+	b       []float64 // feedback
+	past    []float64
+}
+
+func (f *filter) applyParams(p *filterParams) {
+	f.enabled = p.enabled
+	f.kind = p.kind
+	f.freq = p.freq
+	f.q = p.q
+	f.gain = p.gain
+	f.N = p.N
+}
+func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) float64 {
+	if !f.enabled {
+		return in
+	}
+	qExponent := 1.0
+	gainRatio := 1.0
+	for _, envelope := range envelopes {
+		if !envelope.enabled {
+			continue
+		}
+		if envelope.destination == destFilterFreq {
+			freqRatio *= math.Pow(16.0, envelope.value)
+		}
+		if envelope.destination == destFilterQ || envelope.destination == destFilterQ0V {
+			qExponent *= envelope.value
+		}
+		if envelope.destination == destFilterGain || envelope.destination == destFilterGain0V {
+			gainRatio *= envelope.value
+		}
+	}
+	f.a, f.b = makeH(f.a, f.b, f.kind, f.N, f.freq*freqRatio, math.Pow(f.q, qExponent), f.gain*gainRatio)
+	pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
+	if len(f.past) < pastLength {
+		f.past = make([]float64, pastLength)
+	}
+	return calcFilterOneSample(in, f.a, f.b, f.past)
+}
+func makeH(
+	feedforward []float64,
+	feedback []float64,
+	kind int,
+	N int,
+	freq float64,
+	q float64,
+	gain float64,
+) ([]float64, []float64) {
+	fc := freq / sampleRate
+	switch kind {
+	case filterLowPassFIR:
+		return makeFIRLowpassH(feedforward, feedback, N, fc, hamming)
+	case filterHighPassFIR:
+		return makeFIRHighpassH(feedforward, feedback, N, fc, hamming)
+	case filterLowPass:
+		return makeBiquadLowpassH(feedforward, feedback, fc, q)
+	case filterHighPass:
+		return makeBiquadHighpassH(feedforward, feedback, fc, q)
+	case filterBandPass1:
+		return makeBiquadBandpass1H(feedforward, feedback, fc, q)
+	case filterBandPass2:
+		return makeBiquadBandpass2H(feedforward, feedback, fc, q)
+	case filterNotch:
+		return makeBiquadNotchH(feedforward, feedback, fc, q)
+	case filterPeaking:
+		return makeBiquadPeakingEQH(feedforward, feedback, fc, q, gain)
+	case filterLowShelf:
+		return makeBiquadLowShelfH(feedforward, feedback, fc, q, gain)
+	case filterHighShelf:
+		return makeBiquadHighShelfH(feedforward, feedback, fc, q, gain)
+	case filterNone:
+		fallthrough
+	default:
+		return makeNoFilterH(feedforward, feedback)
+	}
+}
+func calcFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
+	for i := 0; i < len(in); i++ {
+		out[i] = calcFilterOneSample(in[i], a, b, past)
+	}
+}
+func calcFilterOneSample(in float64, a []float64, b []float64, past []float64) float64 {
+	// apply b
+	for j := 0; j < len(b); j++ {
+		in -= past[j] * b[j]
+	}
+	// apply a
+	o := in * a[0]
+	for j := 1; j < len(a); j++ {
+		o += past[j-1] * a[j]
+	}
+	// unshift f.past
+	for j := len(past) - 2; j >= 0; j-- {
+		past[j+1] = past[j]
+	}
+	if len(past) > 0 {
+		past[0] = in
+	}
+	return o
+}
+func impulseResponse(a []float64, b []float64, n int) []float64 {
+	in := make([]float64, n)
+	out := make([]float64, n)
+	past := make([]float64, int(math.Max(float64(len(a)-1), float64(len(b)))))
+	in[0] = 1
+	calcFilter(in, out, a, b, past)
+	return out
+}
+func frequencyResponse(a []float64, b []float64) []float64 {
+	h := impulseResponse(a, b, fftSize)
+	fft.CalcAbs(h)
+	return h[:fftSize/2]
+}
+
+// ----- Calculation ----- //
 
 func makeNewSliceIfLengthsAreNotTheSame(slice []float64, expectedLength int) []float64 {
 	if len(slice) == expectedLength {
