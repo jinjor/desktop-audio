@@ -8,6 +8,7 @@ type decoratedOsc struct {
 	oscs      []*osc
 	adsr      *adsr
 	filter    *filter
+	formant   *formant
 	lfos      []*lfo
 	envelopes []*envelope
 }
@@ -32,6 +33,7 @@ func (o *decoratedOsc) applyParams(
 	oscParams []*oscParams,
 	adsrParams *adsrParams,
 	filterParams *filterParams,
+	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
 ) {
@@ -103,5 +105,7 @@ func (o *decoratedOsc) step(event int) float64 {
 	for _, osc := range o.oscs {
 		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
 	}
-	return o.filter.step(value, filterFreqRatio, o.envelopes)
+	value = o.filter.step(value, filterFreqRatio, o.envelopes)
+	value = o.formant.step(value)
+	return value
 }

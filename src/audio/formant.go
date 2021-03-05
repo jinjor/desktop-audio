@@ -141,7 +141,7 @@ func (f *formant) applyParams(p *formantParams) {
 	f.applyQ(p.q)
 	f.tone = p.tone
 }
-func (f *formant) step(in float64, freqRatio float64) float64 {
+func (f *formant) step(in float64) float64 {
 	if !f.enabled {
 		return in
 	}
