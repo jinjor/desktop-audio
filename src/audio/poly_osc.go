@@ -25,6 +25,7 @@ func newPolyOsc() *polyOsc {
 				oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
 				adsr:      &adsr{},
 				filter:    &filter{},
+				formant:   newFormant(),
 				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
 				envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
 			},
@@ -39,13 +40,14 @@ func (p *polyOsc) calc(
 	oscParams []*oscParams,
 	adsrParams *adsrParams,
 	filterParams *filterParams,
+	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
 	echo *echo,
 	out []float64,
 ) {
 	for _, o := range p.active {
-		o.applyParams(oscParams, adsrParams, filterParams, lfoParams, envelopeParams)
+		o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
 	}
 	for i := int64(0); i < int64(len(out)); i++ {
 		events := events[i]
@@ -60,7 +62,7 @@ func (p *polyOsc) calc(
 					o.note = data.note
 					o.initWithNote(oscParams, data.note)
 					o.adsr.init(adsrParams)
-					o.applyParams(oscParams, adsrParams, filterParams, lfoParams, envelopeParams)
+					o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
 				} else {
 					log.Println("maxPoly exceeded")
 				}

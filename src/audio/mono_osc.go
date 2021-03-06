@@ -18,6 +18,7 @@ func newMonoOsc() *monoOsc {
 			oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
 			adsr:      &adsr{},
 			filter:    &filter{},
+			formant:   newFormant(),
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
 			envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
 		},
@@ -30,13 +31,14 @@ func (m *monoOsc) calc(
 	oscParams []*oscParams,
 	adsrParams *adsrParams,
 	filterParams *filterParams,
+	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
 	glideTime int,
 	echo *echo,
 	out []float64,
 ) {
-	m.o.applyParams(oscParams, adsrParams, filterParams, lfoParams, envelopeParams)
+	m.o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
 	for i := int64(0); i < int64(len(out)); i++ {
 		event := enumNoEvent
 		for _, e := range events[i] {

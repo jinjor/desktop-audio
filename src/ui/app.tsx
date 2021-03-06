@@ -402,6 +402,54 @@ const FilterGain = React.memo(
   }
 );
 
+const FormantKind = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
+    const onChange = (value: string) =>
+      o.dispatch({ type: "changedFormantKind", value });
+    return (
+      <Radio
+        list={["a", "e", "i", "o", "u"]}
+        value={o.value}
+        onChange={onChange}
+      />
+    );
+  }
+);
+const FormantTone = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedFormantTone", value });
+    return (
+      <LabeledKnob
+        min={0.5}
+        max={2}
+        steps={400}
+        exponential={true}
+        value={o.value}
+        onChange={onChange}
+        label="Tone"
+      />
+    );
+  }
+);
+const FormantQ = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedFormantQ", value });
+    return (
+      <LabeledKnob
+        min={0}
+        max={50}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        onChange={onChange}
+        label="Q"
+      />
+    );
+  }
+);
+
 type LFODestination = {
   freqType: string;
   minFreq: number;
@@ -1006,6 +1054,12 @@ const paramsDecoder = d.object({
     q: d.number(),
     gain: d.number(),
   }),
+  formant: d.object({
+    enabled: d.boolean,
+    kind: d.string(),
+    tone: d.number(),
+    q: d.number(),
+  }),
   echo: d.object({
     enabled: d.boolean,
     delay: d.number(),
@@ -1055,6 +1109,10 @@ type ParamsAction =
   | { type: "changedFilterFreq"; value: number }
   | { type: "changedFilterQ"; value: number }
   | { type: "changedFilterGain"; value: number }
+  | { type: "changedFormantEnabled"; value: boolean }
+  | { type: "changedFormantKind"; value: string }
+  | { type: "changedFormantTone"; value: number }
+  | { type: "changedFormantQ"; value: number }
   | { type: "changedEchoEnabled"; value: boolean }
   | { type: "changedEchoDelay"; value: number }
   | { type: "changedEchoFeedbackGain"; value: number }
@@ -1095,6 +1153,12 @@ const App = () => {
         freq: 1000,
         q: 0,
         gain: 0,
+      },
+      formant: {
+        enabled: false,
+        kind: "a",
+        tone: 1000,
+        q: 0,
       },
       lfos: [defaultLFO, defaultLFO, defaultLFO],
       envelopes: [defaultEnvelope, defaultEnvelope, defaultEnvelope],
@@ -1400,6 +1464,38 @@ const App = () => {
           filter: { ...state.filter, gain: value },
         };
       }
+      case "changedFormantEnabled": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "formant", "enabled", String(value)]);
+        return {
+          ...state,
+          formant: { ...state.formant, enabled: value },
+        };
+      }
+      case "changedFormantKind": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "formant", "kind", value]);
+        return {
+          ...state,
+          formant: { ...state.formant, kind: value },
+        };
+      }
+      case "changedFormantTone": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "formant", "tone", value]);
+        return {
+          ...state,
+          formant: { ...state.formant, tone: value },
+        };
+      }
+      case "changedFormantQ": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "formant", "q", value]);
+        return {
+          ...state,
+          formant: { ...state.formant, q: value },
+        };
+      }
       case "changedEchoEnabled": {
         const { value } = action;
         ipcRenderer.send("audio", ["set", "echo", "enabled", String(value)]);
@@ -1482,6 +1578,12 @@ const App = () => {
       value,
     });
   };
+  const onChangeFormantEnabled = (value: boolean) => {
+    dispatchParam({
+      type: "changedFormantEnabled",
+      value,
+    });
+  };
   const onChangeEchoEnabled = (value: boolean) => {
     dispatchParam({
       type: "changedEchoEnabled",
@@ -1523,6 +1625,22 @@ const App = () => {
               <FilterFreq dispatch={dispatchParam} value={p.filter.freq} />
               <FilterQ dispatch={dispatchParam} value={p.filter.q} />
               <FilterGain dispatch={dispatchParam} value={p.filter.gain} />
+            </div>
+          </div>
+        </EditGroup>
+        <EditGroup
+          label="Formant"
+          enabled={p.formant.enabled}
+          canBypass={true}
+          onChangeEnabled={onChangeFormantEnabled}
+        >
+          <div style={{ display: "flex", gap: "12px" }}>
+            <div>
+              <FormantKind dispatch={dispatchParam} value={p.formant.kind} />
+            </div>
+            <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+              <FormantTone dispatch={dispatchParam} value={p.formant.tone} />
+              <FormantQ dispatch={dispatchParam} value={p.formant.q} />
             </div>
           </div>
         </EditGroup>
