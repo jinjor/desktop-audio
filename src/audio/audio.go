@@ -569,22 +569,22 @@ var filterShapeFeedback = []float64{}
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	kind := a.state.filterParams.kind
-	if !a.state.filterParams.enabled {
-		kind = filterNone
-	}
-	filterShapeFeedforward, filterShapeFeedback := makeH(
-		filterShapeFeedforward,
-		filterShapeFeedback,
-		kind,
-		a.state.filterParams.N,
-		a.state.filterParams.freq,
-		a.state.filterParams.q,
-		a.state.filterParams.gain,
-	)
-	// TODO: formant
+	filter := &filter{}
+	filter.applyParams(a.state.filterParams)
+	formant := newFormant()
+	formant.applyParams(a.state.formantParams)
 	a.state.Unlock()
-	return frequencyResponse(filterShapeFeedforward, filterShapeFeedback)
+
+	out := make([]float64, fftSize)
+	for i := 0; i < fftSize; i++ {
+		in := 0.0
+		if i == 0 {
+			in = 1.0
+		}
+		out[i] += formant.step(filter.step(in, 1.0, nil))
+	}
+	fft.CalcAbs(out)
+	return out[:fftSize/2]
 }
 
 type statusJSON struct {
