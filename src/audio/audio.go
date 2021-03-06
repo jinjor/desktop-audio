@@ -156,7 +156,8 @@ type state struct {
 	envelopeParams []*envelopeParams
 	echoParams     *echoParams
 	polyMode       bool
-	glideTime      int // ms
+	glideTime      int     // ms
+	velSense       float64 // 0-1
 	monoOsc        *monoOsc
 	polyOsc        *polyOsc
 	echo           *echo
@@ -168,6 +169,7 @@ type state struct {
 type stateJSON struct {
 	Poly      string            `json:"poly"`
 	GlideTime int               `json:"glideTime"`
+	VelSense  float64           `json:"velSense"`
 	Oscs      []json.RawMessage `json:"oscs"`
 	Adsr      json.RawMessage   `json:"adsr"`
 	Filter    json.RawMessage   `json:"filter"`
@@ -188,6 +190,7 @@ func (s *state) applyJSON(data json.RawMessage) {
 	}
 	s.polyMode = j.Poly == "poly"
 	s.glideTime = j.GlideTime
+	s.velSense = j.VelSense
 	if len(j.Oscs) == len(s.oscParams) {
 		for i, j := range j.Oscs {
 			s.oscParams[i].applyJSON(j)
@@ -234,6 +237,7 @@ func (s *state) toJSON() json.RawMessage {
 	return toRawMessage(&stateJSON{
 		Poly:      poly,
 		GlideTime: s.glideTime,
+		VelSense:  s.velSense,
 		Oscs:      oscJsons,
 		Adsr:      s.adsrParams.toJSON(),
 		Filter:    s.filterParams.toJSON(),
@@ -256,6 +260,7 @@ func newState() *state {
 		echoParams:     &echoParams{},
 		polyMode:       false,
 		glideTime:      100,
+		velSense:       0,
 		monoOsc:        newMonoOsc(),
 		polyOsc:        newPolyOsc(),
 		echo:           &echo{delay: &delay{}},
@@ -421,6 +426,13 @@ func (a *Audio) update(command []string) error {
 				return err
 			}
 			a.state.glideTime = int(value)
+		case "vel_sense":
+			command = command[1:]
+			value, err := strconv.ParseFloat(command[0], 64)
+			if err != nil {
+				return err
+			}
+			a.state.velSense = value
 		case "osc":
 			command = command[1:]
 			index, err := strconv.ParseInt(command[0], 10, 64)
