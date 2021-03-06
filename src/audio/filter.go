@@ -183,11 +183,6 @@ func makeH(
 		return makeNoFilterH(feedforward, feedback)
 	}
 }
-func calcFilter(in []float64, out []float64, a []float64, b []float64, past []float64) {
-	for i := 0; i < len(in); i++ {
-		out[i] = calcFilterOneSample(in[i], a, b, past)
-	}
-}
 func calcFilterOneSample(in float64, a []float64, b []float64, past []float64) float64 {
 	// apply b
 	for j := 0; j < len(b); j++ {
@@ -206,19 +201,6 @@ func calcFilterOneSample(in float64, a []float64, b []float64, past []float64) f
 		past[0] = in
 	}
 	return o
-}
-func impulseResponse(a []float64, b []float64, n int) []float64 {
-	in := make([]float64, n)
-	out := make([]float64, n)
-	past := make([]float64, int(math.Max(float64(len(a)-1), float64(len(b)))))
-	in[0] = 1
-	calcFilter(in, out, a, b, past)
-	return out
-}
-func frequencyResponse(a []float64, b []float64) []float64 {
-	h := impulseResponse(a, b, fftSize)
-	fft.CalcAbs(h)
-	return h[:fftSize/2]
 }
 
 // ----- Calculation ----- //
