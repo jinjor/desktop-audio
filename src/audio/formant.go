@@ -63,7 +63,7 @@ func (f *formantParams) set(key string, value string) error {
 		f.enabled = value == "true"
 	case "kind":
 		f.kind = formantKindFromString(value)
-	case "freq":
+	case "tone":
 		tone, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return err
@@ -108,7 +108,7 @@ func newFormant() *formant {
 		enabled: false,
 		kind:    kind,
 		tone:    1,
-		filters: make([]*filter, 4),
+		filters: []*filter{{}, {}, {}, {}},
 	}
 	formant.applyFreqs(kind)
 	formant.applyQ(1)
@@ -119,7 +119,7 @@ func (f *formant) applyFreqs(kind int) {
 	for i, filter := range f.filters {
 		params := &filterParams{
 			enabled: true,
-			kind:    filterBandPass1,
+			kind:    filterBandPass2,
 			freq:    freqs[i],
 			q:       1,
 			gain:    0,
@@ -149,5 +149,5 @@ func (f *formant) step(in float64) float64 {
 	for _, filter := range f.filters {
 		out += filter.step(in, f.tone, nil)
 	}
-	return out
+	return out * 1.5
 }

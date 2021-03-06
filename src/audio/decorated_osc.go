@@ -39,6 +39,7 @@ func (o *decoratedOsc) applyParams(
 ) {
 	o.adsr.setParams(adsrParams)
 	o.filter.applyParams(filterParams)
+	o.formant.applyParams(formantParams)
 	for i, lfo := range o.lfos {
 		lfo.applyParams(lfoParams[i])
 	}

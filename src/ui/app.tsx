@@ -439,7 +439,7 @@ const FormantQ = React.memo(
     return (
       <LabeledKnob
         min={0}
-        max={20}
+        max={50}
         steps={400}
         exponential={false}
         value={o.value}
