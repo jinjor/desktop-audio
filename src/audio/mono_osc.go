@@ -34,6 +34,7 @@ func (m *monoOsc) calc(
 	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
+	velSense float64,
 	glideTime int,
 	echo *echo,
 	out []float64,
@@ -74,7 +75,9 @@ func (m *monoOsc) calc(
 				}
 			}
 		}
-		out[i] = m.o.step(event)
-		out[i] = echo.step(out[i])
+		velocity := 127 // TODO
+		gain := 1.0 - (1.0-float64(velocity)/127.0)*velSense
+		value := m.o.step(event) * gain
+		out[i] = echo.step(value)
 	}
 }

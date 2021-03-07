@@ -14,7 +14,8 @@ type polyOsc struct {
 
 type noteOsc struct {
 	*decoratedOsc
-	note int
+	note     int
+	velocity int
 }
 
 func newPolyOsc() *polyOsc {
@@ -43,6 +44,7 @@ func (p *polyOsc) calc(
 	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
+	velSense float64,
 	echo *echo,
 	out []float64,
 ) {
@@ -60,6 +62,7 @@ func (p *polyOsc) calc(
 					p.pooled = p.pooled[:lenPooled-1]
 					p.active = append(p.active, o)
 					o.note = data.note
+					o.velocity = data.velocity
 					o.initWithNote(oscParams, data.note)
 					o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
 				} else {
@@ -82,7 +85,8 @@ func (p *polyOsc) calc(
 					}
 				}
 			}
-			out[i] += o.step(event)
+			gain := 1.0 - (1.0-float64(o.velocity)/127.0)*velSense
+			out[i] += o.step(event) * gain
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]

@@ -335,9 +335,9 @@ func (a *Audio) Read(buf []byte) (int, error) {
 
 		a.state.echo.applyParams(a.state.echoParams)
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.echo, out)
+			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.echo, out)
 		} else {
-			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime, a.state.echo, out)
+			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.glideTime, a.state.echo, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
