@@ -43,7 +43,7 @@ func (tv *transitiveValue) init(value float64) {
 	tv.pos = 0
 }
 
-func (tv *transitiveValue) lenear(duration float64, targetValue float64) {
+func (tv *transitiveValue) linear(duration float64, targetValue float64) {
 	tv.kind = transitionLinear
 	tv.duration = duration
 	tv.endThreshold = 0

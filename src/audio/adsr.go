@@ -157,7 +157,7 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 
 func (a *adsr) noteOn() {
 	a.phase = phaseAttack
-	a.tvalue.lenear(a.attack, a.peek)
+	a.tvalue.linear(a.attack, a.peek)
 }
 
 func (a *adsr) noteOff() {
@@ -170,7 +170,7 @@ func (a *adsr) step() {
 	case phaseAttack:
 		if a.tvalue.step() {
 			a.phase = phaseKeep
-			a.tvalue.lenear(a.keep, a.peek)
+			a.tvalue.linear(a.keep, a.peek)
 		}
 	case phaseKeep:
 		if a.tvalue.step() {
