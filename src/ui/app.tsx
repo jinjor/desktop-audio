@@ -345,6 +345,124 @@ const Release = React.memo(
     );
   }
 );
+
+const NoteFilterKind = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
+    const onChange = (value: string) =>
+      o.dispatch({ type: "changedNoteFilterKind", value });
+    return (
+      <Select
+        list={[
+          "none",
+          "lowpass",
+          "highpass",
+          "bandpass-1",
+          "bandpass-2",
+          "peaking",
+          "lowshelf",
+          "highshelf",
+        ]}
+        value={o.value}
+        onChange={onChange}
+      />
+    );
+  }
+);
+const NoteFilterBaseOsc = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const list = ["OSC 1", "OSC 2"];
+    const onChange = (value: string) =>
+      o.dispatch({
+        type: "changedNoteFilterBaseOsc",
+        value: list.indexOf(value),
+      });
+    return <Select list={list} value={list[o.value]} onChange={onChange} />;
+  }
+);
+const NoteFilterOctave = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({
+        type: "changedNoteFilterOctave",
+        value,
+      });
+    const min = -2;
+    const max = 2;
+    const steps = max - min + 1;
+    return (
+      <LabeledKnob
+        min={min}
+        max={max}
+        steps={steps}
+        from={0}
+        exponential={true}
+        value={o.value}
+        onChange={onChange}
+        label="Octave"
+      />
+    );
+  }
+);
+const NoteFilterCoarse = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({
+        type: "changedNoteFilterCoarse",
+        value,
+      });
+    const min = -12;
+    const max = 12;
+    const steps = max - min + 1;
+    return (
+      <LabeledKnob
+        min={min}
+        max={max}
+        steps={steps}
+        exponential={true}
+        value={o.value}
+        from={0}
+        onChange={onChange}
+        label="Coarse"
+      />
+    );
+  }
+);
+const NoteFilterQ = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedNoteFilterQ", value });
+    return (
+      <LabeledKnob
+        min={0}
+        max={20}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        onChange={onChange}
+        label="Q"
+      />
+    );
+  }
+);
+const NoteFilterGain = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedNoteFilterGain", value });
+    return (
+      <LabeledKnob
+        min={-40}
+        max={40}
+        steps={400}
+        exponential={false}
+        value={o.value}
+        from={0}
+        onChange={onChange}
+        label="Gain"
+      />
+    );
+  }
+);
+
 const FilterKind = React.memo(
   (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
     const onChange = (value: string) =>
@@ -1069,6 +1187,15 @@ const paramsDecoder = d.object({
       amount: d.number(),
     })
   ),
+  noteFilter: d.object({
+    enabled: d.boolean,
+    baseOsc: d.number(),
+    kind: d.string(),
+    octave: d.number(),
+    coarse: d.number(),
+    q: d.number(),
+    gain: d.number(),
+  }),
   filter: d.object({
     enabled: d.boolean,
     kind: d.string(),
@@ -1127,6 +1254,13 @@ type ParamsAction =
   | { type: "changedEnvelopeDelay"; index: number; value: number }
   | { type: "changedEnvelopeAttack"; index: number; value: number }
   | { type: "changedEnvelopeAmount"; index: number; value: number }
+  | { type: "changedNoteFilterEnabled"; value: boolean }
+  | { type: "changedNoteFilterBaseOsc"; value: number }
+  | { type: "changedNoteFilterKind"; value: string }
+  | { type: "changedNoteFilterOctave"; value: number }
+  | { type: "changedNoteFilterCoarse"; value: number }
+  | { type: "changedNoteFilterQ"; value: number }
+  | { type: "changedNoteFilterGain"; value: number }
   | { type: "changedFilterEnabled"; value: boolean }
   | { type: "changedFilterKind"; value: string }
   | { type: "changedFilterFreq"; value: number }
@@ -1170,6 +1304,15 @@ const App = () => {
         decay: 100,
         sustain: 0.7,
         release: 100,
+      },
+      noteFilter: {
+        enabled: false,
+        baseOsc: 0,
+        kind: "none",
+        octave: 0,
+        coarse: 0,
+        q: 0,
+        gain: 0,
       },
       filter: {
         enabled: false,
@@ -1453,6 +1596,67 @@ const App = () => {
           }),
         };
       }
+      case "changedNoteFilterEnabled": {
+        const { value } = action;
+        ipcRenderer.send("audio", [
+          "set",
+          "note_filter",
+          "enabled",
+          String(value),
+        ]);
+        return {
+          ...state,
+          noteFilter: { ...state.noteFilter, enabled: value },
+        };
+      }
+      case "changedNoteFilterBaseOsc": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "note_filter", "base_osc", value]);
+        return {
+          ...state,
+          noteFilter: { ...state.noteFilter, baseOsc: value },
+        };
+      }
+      case "changedNoteFilterKind": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "note_filter", "kind", value]);
+        return {
+          ...state,
+          noteFilter: { ...state.noteFilter, kind: value },
+        };
+      }
+      case "changedNoteFilterOctave": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "note_filter", "octave", value]);
+        return {
+          ...state,
+          noteFilter: { ...state.noteFilter, octave: value },
+        };
+      }
+      case "changedNoteFilterCoarse": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "note_filter", "coarse", value]);
+        return {
+          ...state,
+          noteFilter: { ...state.noteFilter, coarse: value },
+        };
+      }
+      case "changedNoteFilterQ": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "note_filter", "q", value]);
+        return {
+          ...state,
+          noteFilter: { ...state.noteFilter, q: value },
+        };
+      }
+      case "changedNoteFilterGain": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "note_filter", "gain", value]);
+        return {
+          ...state,
+          noteFilter: { ...state.noteFilter, gain: value },
+        };
+      }
       case "changedFilterEnabled": {
         const { value } = action;
         ipcRenderer.send("audio", ["set", "filter", "enabled", String(value)]);
@@ -1601,6 +1805,12 @@ const App = () => {
       value: action,
     });
   };
+  const onChangeNoteFilterEnabled = (value: boolean) => {
+    dispatchParam({
+      type: "changedNoteFilterEnabled",
+      value,
+    });
+  };
   const onChangeFilterEnabled = (value: boolean) => {
     dispatchParam({
       type: "changedFilterEnabled",
@@ -1642,7 +1852,37 @@ const App = () => {
           </div>
         </EditGroup>
         <EditGroup
-          label="FILTER"
+          label="Note Filter"
+          enabled={p.noteFilter.enabled}
+          canBypass={true}
+          onChangeEnabled={onChangeNoteFilterEnabled}
+        >
+          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+            <NoteFilterKind
+              dispatch={dispatchParam}
+              value={p.noteFilter.kind}
+            />
+            <NoteFilterBaseOsc
+              dispatch={dispatchParam}
+              value={p.noteFilter.baseOsc}
+            />
+            <NoteFilterOctave
+              dispatch={dispatchParam}
+              value={p.noteFilter.octave}
+            />
+            <NoteFilterCoarse
+              dispatch={dispatchParam}
+              value={p.noteFilter.coarse}
+            />
+            <NoteFilterQ dispatch={dispatchParam} value={p.noteFilter.q} />
+            <NoteFilterGain
+              dispatch={dispatchParam}
+              value={p.noteFilter.gain}
+            />
+          </div>
+        </EditGroup>
+        <EditGroup
+          label="Filter"
           enabled={p.filter.enabled}
           canBypass={true}
           onChangeEnabled={onChangeFilterEnabled}

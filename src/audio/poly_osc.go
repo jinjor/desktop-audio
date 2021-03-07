@@ -21,12 +21,13 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				oscs:      []*osc{newOsc(false), newOsc(false)},
-				adsr:      &adsr{tvalue: &transitiveValue{}},
-				filter:    &filter{},
-				formant:   newFormant(),
-				lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
-				envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+				oscs:       []*osc{newOsc(false), newOsc(false)},
+				adsr:       &adsr{tvalue: &transitiveValue{}},
+				noteFilter: &noteFilter{filter: &filter{}},
+				filter:     &filter{},
+				formant:    newFormant(),
+				lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
+				envelopes:  []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
 			},
 		}
 	}
@@ -38,6 +39,7 @@ func (p *polyOsc) calc(
 	events [][]*midiEvent,
 	oscParams []*oscParams,
 	adsrParams *adsrParams,
+	noteFilterParams *noteFilterParams,
 	filterParams *filterParams,
 	formantParams *formantParams,
 	lfoParams []*lfoParams,
@@ -47,7 +49,7 @@ func (p *polyOsc) calc(
 	out []float64,
 ) {
 	for _, o := range p.active {
-		o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
+		o.applyParams(oscParams, adsrParams, noteFilterParams, filterParams, formantParams, lfoParams, envelopeParams)
 	}
 	for i := int64(0); i < int64(len(out)); i++ {
 		events := events[i]
@@ -62,7 +64,7 @@ func (p *polyOsc) calc(
 					o.note = data.note
 					o.velocity = data.velocity
 					o.initWithNote(oscParams, data.note)
-					o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
+					o.applyParams(oscParams, adsrParams, noteFilterParams, filterParams, formantParams, lfoParams, envelopeParams)
 				} else {
 					log.Println("maxPoly exceeded")
 				}

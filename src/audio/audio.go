@@ -151,36 +151,38 @@ func (c *Changes) Delete(key string) {
 
 type state struct {
 	sync.Mutex
-	events         [][]*midiEvent // length: samplesPerCycle * 2
-	oscParams      []*oscParams
-	adsrParams     *adsrParams
-	filterParams   *filterParams
-	formantParams  *formantParams
-	lfoParams      []*lfoParams
-	envelopeParams []*envelopeParams
-	echoParams     *echoParams
-	polyMode       bool
-	glideTime      int     // ms
-	velSense       float64 // 0-1
-	monoOsc        *monoOsc
-	polyOsc        *polyOsc
-	echo           *echo
-	pos            int64
-	out            []float64 // length: fftSize
-	lastRead       float64
-	processTime    float64
+	events           [][]*midiEvent // length: samplesPerCycle * 2
+	oscParams        []*oscParams
+	adsrParams       *adsrParams
+	noteFilterParams *noteFilterParams
+	filterParams     *filterParams
+	formantParams    *formantParams
+	lfoParams        []*lfoParams
+	envelopeParams   []*envelopeParams
+	echoParams       *echoParams
+	polyMode         bool
+	glideTime        int     // ms
+	velSense         float64 // 0-1
+	monoOsc          *monoOsc
+	polyOsc          *polyOsc
+	echo             *echo
+	pos              int64
+	out              []float64 // length: fftSize
+	lastRead         float64
+	processTime      float64
 }
 type stateJSON struct {
-	Poly      string            `json:"poly"`
-	GlideTime int               `json:"glideTime"`
-	VelSense  float64           `json:"velSense"`
-	Oscs      []json.RawMessage `json:"oscs"`
-	Adsr      json.RawMessage   `json:"adsr"`
-	Filter    json.RawMessage   `json:"filter"`
-	Formant   json.RawMessage   `json:"formant"`
-	Lfos      []json.RawMessage `json:"lfos"`
-	Envelopes []json.RawMessage `json:"envelopes"`
-	Echo      json.RawMessage   `json:"echo"`
+	Poly       string            `json:"poly"`
+	GlideTime  int               `json:"glideTime"`
+	VelSense   float64           `json:"velSense"`
+	Oscs       []json.RawMessage `json:"oscs"`
+	Adsr       json.RawMessage   `json:"adsr"`
+	NoteFilter json.RawMessage   `json:"noteFilter"`
+	Filter     json.RawMessage   `json:"filter"`
+	Formant    json.RawMessage   `json:"formant"`
+	Lfos       []json.RawMessage `json:"lfos"`
+	Envelopes  []json.RawMessage `json:"envelopes"`
+	Echo       json.RawMessage   `json:"echo"`
 }
 
 func (s *state) applyJSON(data json.RawMessage) {
@@ -203,6 +205,7 @@ func (s *state) applyJSON(data json.RawMessage) {
 		log.Println("failed to apply JSON to osc params")
 	}
 	s.adsrParams.applyJSON(j.Adsr)
+	s.noteFilterParams.applyJSON(j.NoteFilter)
 	s.filterParams.applyJSON(j.Filter)
 	s.formantParams.applyJSON(j.Formant)
 	if len(j.Lfos) == len(s.lfoParams) {
@@ -239,37 +242,39 @@ func (s *state) toJSON() json.RawMessage {
 		poly = "poly"
 	}
 	return toRawMessage(&stateJSON{
-		Poly:      poly,
-		GlideTime: s.glideTime,
-		VelSense:  s.velSense,
-		Oscs:      oscJsons,
-		Adsr:      s.adsrParams.toJSON(),
-		Filter:    s.filterParams.toJSON(),
-		Formant:   s.formantParams.toJSON(),
-		Lfos:      lfoJsons,
-		Envelopes: envelopeJsons,
-		Echo:      s.echoParams.toJSON(),
+		Poly:       poly,
+		GlideTime:  s.glideTime,
+		VelSense:   s.velSense,
+		Oscs:       oscJsons,
+		Adsr:       s.adsrParams.toJSON(),
+		NoteFilter: s.noteFilterParams.toJSON(),
+		Filter:     s.filterParams.toJSON(),
+		Formant:    s.formantParams.toJSON(),
+		Lfos:       lfoJsons,
+		Envelopes:  envelopeJsons,
+		Echo:       s.echoParams.toJSON(),
 	})
 }
 
 func newState() *state {
 	return &state{
-		events:         make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:      []*oscParams{{kind: waveSine, level: 1.0}, {kind: waveSine, level: 1.0}},
-		adsrParams:     &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
-		lfoParams:      []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
-		filterParams:   &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
-		formantParams:  &formantParams{kind: formantA, tone: 1, q: 1},
-		envelopeParams: []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
-		echoParams:     &echoParams{},
-		polyMode:       false,
-		glideTime:      100,
-		velSense:       0,
-		monoOsc:        newMonoOsc(),
-		polyOsc:        newPolyOsc(),
-		echo:           &echo{delay: &delay{}},
-		pos:            0,
-		out:            make([]float64, fftSize),
+		events:           make([][]*midiEvent, samplesPerCycle*2),
+		oscParams:        []*oscParams{{kind: waveSine, level: 1.0}, {kind: waveSine, level: 1.0}},
+		adsrParams:       &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
+		lfoParams:        []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
+		noteFilterParams: &noteFilterParams{kind: filterNone, q: 1, gain: 0},
+		filterParams:     &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
+		formantParams:    &formantParams{kind: formantA, tone: 1, q: 1},
+		envelopeParams:   []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
+		echoParams:       &echoParams{},
+		polyMode:         false,
+		glideTime:        100,
+		velSense:         0,
+		monoOsc:          newMonoOsc(),
+		polyOsc:          newPolyOsc(),
+		echo:             &echo{delay: &delay{}},
+		pos:              0,
+		out:              make([]float64, fftSize),
 	}
 }
 
@@ -338,9 +343,9 @@ func (a *Audio) Read(buf []byte) (int, error) {
 
 		a.state.echo.applyParams(a.state.echoParams)
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.echo, out)
+			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.noteFilterParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.echo, out)
 		} else {
-			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.glideTime, a.state.echo, out)
+			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.noteFilterParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.glideTime, a.state.echo, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
@@ -460,6 +465,16 @@ func (a *Audio) update(command []string) error {
 			if err != nil {
 				return err
 			}
+		case "note_filter":
+			command = command[1:]
+			if len(command) != 2 {
+				return fmt.Errorf("invalid key-value pair %v", command)
+			}
+			err := a.state.noteFilterParams.set(command[0], command[1])
+			if err != nil {
+				return err
+			}
+			a.Changes.Add("filter-shape")
 		case "filter":
 			command = command[1:]
 			if len(command) != 2 {

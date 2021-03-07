@@ -11,12 +11,13 @@ type monoOsc struct {
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
-			oscs:      []*osc{newOsc(false), newOsc(false)},
-			adsr:      &adsr{tvalue: &transitiveValue{}},
-			filter:    &filter{},
-			formant:   newFormant(),
-			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
-			envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+			oscs:       []*osc{newOsc(false), newOsc(false)},
+			adsr:       &adsr{tvalue: &transitiveValue{}},
+			noteFilter: &noteFilter{filter: &filter{}},
+			filter:     &filter{},
+			formant:    newFormant(),
+			lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
+			envelopes:  []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
 		},
 		activeNotes: make([]*noteOn, 0, 128),
 		gain:        newTransitiveValue(),
@@ -27,6 +28,7 @@ func (m *monoOsc) calc(
 	events [][]*midiEvent,
 	oscParams []*oscParams,
 	adsrParams *adsrParams,
+	noteFilterParams *noteFilterParams,
 	filterParams *filterParams,
 	formantParams *formantParams,
 	lfoParams []*lfoParams,
@@ -36,7 +38,7 @@ func (m *monoOsc) calc(
 	echo *echo,
 	out []float64,
 ) {
-	m.o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
+	m.o.applyParams(oscParams, adsrParams, noteFilterParams, filterParams, formantParams, lfoParams, envelopeParams)
 	for i := int64(0); i < int64(len(out)); i++ {
 		event := enumNoEvent
 		for _, e := range events[i] {

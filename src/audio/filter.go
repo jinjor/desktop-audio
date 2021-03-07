@@ -97,6 +97,94 @@ func (f *filterParams) set(key string, value string) error {
 	return nil
 }
 
+// ----- Note Filter Params ----- //
+
+type noteFilterParams struct {
+	enabled bool
+	kind    int
+	baseOsc int
+	octave  int
+	coarse  int
+	q       float64
+	gain    float64
+}
+
+type noteFilterJSON struct {
+	Enabled bool    `json:"enabled"`
+	Kind    string  `json:"kind"`
+	BaseOsc int     `json:"baseOsc"`
+	Octave  int     `json:"octave"`
+	Coarse  int     `json:"coarse"`
+	Q       float64 `json:"q"`
+	Gain    float64 `json:"gain"`
+}
+
+func (f *noteFilterParams) applyJSON(data json.RawMessage) {
+	var j noteFilterJSON
+	err := json.Unmarshal(data, &j)
+	if err != nil {
+		log.Println("failed to apply JSON to note filter")
+		return
+	}
+	f.enabled = j.Enabled
+	f.kind = filterKindFromString(j.Kind)
+	f.baseOsc = j.BaseOsc
+	f.octave = j.Octave
+	f.coarse = j.Coarse
+	f.q = j.Q
+	f.gain = j.Gain
+}
+func (f *noteFilterParams) toJSON() json.RawMessage {
+	return toRawMessage(&noteFilterJSON{
+		Enabled: f.enabled,
+		Kind:    filterKindToString(f.kind),
+		BaseOsc: f.baseOsc,
+		Octave:  f.octave,
+		Coarse:  f.coarse,
+		Q:       f.q,
+		Gain:    f.gain,
+	})
+}
+func (f *noteFilterParams) set(key string, value string) error {
+	switch key {
+	case "enabled":
+		f.enabled = value == "true"
+	case "kind":
+		f.kind = filterKindFromString(value)
+	case "base_osc":
+		baseOsc, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+		f.baseOsc = int(baseOsc)
+	case "octave":
+		octave, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+		f.octave = int(octave)
+	case "coarse":
+		coarse, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return err
+		}
+		f.coarse = int(coarse)
+	case "q":
+		q, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.q = q
+	case "gain":
+		gain, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return err
+		}
+		f.gain = gain
+	}
+	return nil
+}
+
 // ----- Filter ----- //
 
 type filter struct {
@@ -206,6 +294,28 @@ func calcFilterOneSample(in float64, a []float64, b []float64, past []float64) f
 		past[0] = in
 	}
 	return o
+}
+
+type noteFilter struct {
+	*filter
+	baseOsc int
+	octave  int
+	coarse  int
+}
+
+func (f *noteFilter) applyParams(p *noteFilterParams) {
+	f.enabled = p.enabled
+	f.kind = p.kind
+	f.baseOsc = p.baseOsc
+	f.octave = p.octave
+	f.coarse = p.coarse
+	f.q = p.q
+	f.gain = p.gain
+	f.N = 0
+}
+func (f *noteFilter) step(in float64, freqRatio float64, envelopes []*envelope, freq float64) float64 {
+	f.filter.freq = freq * math.Pow(2, float64(f.octave)+float64(f.coarse)/12)
+	return f.filter.step(in, freqRatio, envelopes)
 }
 
 // ----- Calculation ----- //

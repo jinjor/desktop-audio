@@ -5,12 +5,13 @@ import (
 )
 
 type decoratedOsc struct {
-	oscs      []*osc
-	adsr      *adsr
-	filter    *filter
-	formant   *formant
-	lfos      []*lfo
-	envelopes []*envelope
+	oscs       []*osc
+	adsr       *adsr
+	noteFilter *noteFilter
+	filter     *filter
+	formant    *formant
+	lfos       []*lfo
+	envelopes  []*envelope
 }
 
 const (
@@ -32,12 +33,14 @@ func (o *decoratedOsc) glide(p []*oscParams, note int, glideTime int) {
 func (o *decoratedOsc) applyParams(
 	oscParams []*oscParams,
 	adsrParams *adsrParams,
+	noteFilterParams *noteFilterParams,
 	filterParams *filterParams,
 	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
 ) {
 	o.adsr.setParams(adsrParams)
+	o.noteFilter.applyParams(noteFilterParams)
 	o.filter.applyParams(filterParams)
 	o.formant.applyParams(formantParams)
 	for i, lfo := range o.lfos {
@@ -106,6 +109,7 @@ func (o *decoratedOsc) step(event int) float64 {
 	for _, osc := range o.oscs {
 		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.getValue()
 	}
+	value = o.noteFilter.step(value, filterFreqRatio, o.envelopes, o.oscs[o.noteFilter.baseOsc].freq.value*freqRatio)
 	value = o.filter.step(value, filterFreqRatio, o.envelopes)
 	value = o.formant.step(value)
 	if math.IsNaN(value) {
