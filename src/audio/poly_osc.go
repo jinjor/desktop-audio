@@ -2,8 +2,6 @@ package audio
 
 import (
 	"log"
-	"math"
-	"math/rand"
 )
 
 type polyOsc struct {
@@ -23,7 +21,7 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
+				oscs:      []*osc{newOsc(false), newOsc(false)},
 				adsr:      &adsr{},
 				filter:    &filter{},
 				formant:   newFormant(),

@@ -109,16 +109,21 @@ func (o *oscParams) set(key string, value string) error {
 // ----- OSC ----- //
 
 type osc struct {
-	enabled   bool
-	kind      int
-	glideTime int // ms
-	freq      float64
-	level     float64
-	phase     float64
-	gliding   bool
-	shiftPos  float64
-	prevFreq  float64
-	nextFreq  float64
+	enabled bool
+	kind    int
+	freq    *transitiveValue
+	level   float64
+	phase   float64
+}
+
+func newOsc(enabled bool) *osc {
+	return &osc{
+		enabled: enabled,
+		freq:    newTransitiveValue(),
+		kind:    waveNone,
+		level:   1.0,
+		phase:   rand.Float64() * 2.0 * math.Pi,
+	}
 }
 
 var blsquareWT *WavetableSet = loadWavetableSet("square")
@@ -143,27 +148,21 @@ func noteWithParamsToFreq(p *oscParams, note int) float64 {
 func (o *osc) initWithNote(p *oscParams, note int) {
 	o.enabled = p.enabled
 	o.kind = p.kind
-	o.freq = noteWithParamsToFreq(p, note)
 	o.level = p.level
 	o.phase = rand.Float64() * 2.0 * math.Pi
+	o.freq.init(noteWithParamsToFreq(p, note))
 }
 func (o *osc) glide(p *oscParams, note int, glideTime int) {
-	nextFreq := noteWithParamsToFreq(p, note)
-	if math.Abs(nextFreq-o.freq) < 0.001 {
-		return
-	}
 	o.enabled = p.enabled
-	o.glideTime = glideTime
-	o.prevFreq = o.freq
-	o.nextFreq = nextFreq
-	o.gliding = true
-	o.shiftPos = 0
+	nextFreq := noteWithParamsToFreq(p, note)
+	o.freq.linear(float64(glideTime), nextFreq)
 }
 func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 	if !o.enabled {
 		return 0.0
 	}
-	freq := o.freq * freqRatio
+	o.freq.step()
+	freq := o.freq.value * freqRatio
 	phase := o.phase + phaseShift
 	value := 0.0
 	switch o.kind {
@@ -206,14 +205,5 @@ func (o *osc) step(freqRatio float64, phaseShift float64) float64 {
 		value = rand.Float64()*2 - 1
 	}
 	o.phase += 2.0 * math.Pi * freq / float64(sampleRate)
-	if o.gliding {
-		o.shiftPos++
-		t := o.shiftPos * secPerSample * 1000 / float64(o.glideTime)
-		o.freq = t*o.nextFreq + (1-t)*o.prevFreq
-		if t >= 1 || math.Abs(o.nextFreq-o.freq) < 0.001 {
-			o.freq = o.nextFreq
-			o.gliding = false
-		}
-	}
 	return value * o.level
 }

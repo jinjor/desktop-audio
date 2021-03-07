@@ -1,10 +1,5 @@
 package audio
 
-import (
-	"math"
-	"math/rand"
-)
-
 // ----- MONO OSC ----- //
 
 type monoOsc struct {
@@ -16,7 +11,7 @@ type monoOsc struct {
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
-			oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
+			oscs:      []*osc{newOsc(false), newOsc(false)},
 			adsr:      &adsr{},
 			filter:    &filter{},
 			formant:   newFormant(),
