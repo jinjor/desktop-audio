@@ -61,7 +61,6 @@ func (p *polyOsc) calc(
 					p.active = append(p.active, o)
 					o.note = data.note
 					o.initWithNote(oscParams, data.note)
-					o.adsr.init(adsrParams)
 					o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
 				} else {
 					log.Println("maxPoly exceeded")

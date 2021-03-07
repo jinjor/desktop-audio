@@ -82,10 +82,10 @@ func (o *decoratedOsc) step(event int) float64 {
 				continue
 			}
 			if envelope.destination == destLfoAmount[lfoIndex] {
-				amountGain *= envelope.value
+				amountGain *= envelope.getValue()
 			}
 			if envelope.destination == destLfoFreq[lfoIndex] {
-				lfoFreqRatio *= math.Pow(16.0, envelope.value)
+				lfoFreqRatio *= math.Pow(16.0, envelope.getValue())
 			}
 		}
 		_freqRatio, _phaseShift, _ampRatio, _filterFreqRatio := lfo.step(o.oscs[0], amountGain, lfoFreqRatio) // TODO
@@ -99,12 +99,12 @@ func (o *decoratedOsc) step(event int) float64 {
 			continue
 		}
 		if envelope.destination == destFreq {
-			freqRatio *= math.Pow(16.0, envelope.value)
+			freqRatio *= math.Pow(16.0, envelope.getValue())
 		}
 	}
 	value := 0.0
 	for _, osc := range o.oscs {
-		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.value
+		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.getValue()
 	}
 	value = o.filter.step(value, filterFreqRatio, o.envelopes)
 	value = o.formant.step(value)
