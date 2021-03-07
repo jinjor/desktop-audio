@@ -468,7 +468,7 @@ const FilterKind = React.memo(
     const onChange = (value: string) =>
       o.dispatch({ type: "changedFilterKind", value });
     return (
-      <Radio
+      <Select
         list={[
           "none",
           "lowpass-fir",
@@ -1887,15 +1887,11 @@ const App = () => {
           canBypass={true}
           onChangeEnabled={onChangeFilterEnabled}
         >
-          <div style={{ display: "flex", gap: "12px" }}>
-            <div>
-              <FilterKind dispatch={dispatchParam} value={p.filter.kind} />
-            </div>
-            <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
-              <FilterFreq dispatch={dispatchParam} value={p.filter.freq} />
-              <FilterQ dispatch={dispatchParam} value={p.filter.q} />
-              <FilterGain dispatch={dispatchParam} value={p.filter.gain} />
-            </div>
+          <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+            <FilterKind dispatch={dispatchParam} value={p.filter.kind} />
+            <FilterFreq dispatch={dispatchParam} value={p.filter.freq} />
+            <FilterQ dispatch={dispatchParam} value={p.filter.q} />
+            <FilterGain dispatch={dispatchParam} value={p.filter.gain} />
           </div>
         </EditGroup>
         <EditGroup
