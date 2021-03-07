@@ -69,7 +69,7 @@ func (tv *transitiveValue) step() bool {
 			ended = true
 		} else {
 			t := phaseTime / float64(tv.duration)
-			tv.value = t*tv.targetValue + (1-t)*tv.initialValue // TODO: don't use the same attack time
+			tv.value = t*tv.targetValue + (1-t)*tv.initialValue
 			tv.pos++
 		}
 	case transitionExponential:
