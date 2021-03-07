@@ -107,7 +107,8 @@ type midiEvent struct {
 }
 
 type noteOn struct {
-	note int
+	note     int
+	velocity int
 }
 type noteOff struct {
 	note int
@@ -526,7 +527,7 @@ func (a *Audio) update(command []string) error {
 		if err != nil {
 			return err
 		}
-		a.addMidiEvent(&noteOn{note: int(note)})
+		a.addMidiEvent(&noteOn{note: int(note), velocity: 127})
 	case "note_off":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
@@ -649,7 +650,8 @@ func (a *Audio) AddMidiEvent(data []byte) {
 	} else if data[0]>>4 == 9 && data[2] > 0 {
 		log.Printf("got note-on: %v\n", data)
 		note := int(data[1])
-		a.addMidiEvent(&noteOn{note: note})
+		velocity := int(data[2])
+		a.addMidiEvent(&noteOn{note: note, velocity: velocity})
 	}
 }
 
