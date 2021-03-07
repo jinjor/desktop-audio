@@ -91,6 +91,9 @@ func freqToNote(freq float64) int {
 	}
 	panic("infinite loop in freqToNote()")
 }
+func velocityToGain(velocity int, velSense float64) float64 {
+	return 1.0 - (1.0-float64(velocity)/127.0)*velSense
+}
 func toRawMessage(v interface{}) json.RawMessage {
 	bytes, err := json.Marshal(v)
 	if err != nil {

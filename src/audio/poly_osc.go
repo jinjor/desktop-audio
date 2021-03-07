@@ -85,7 +85,7 @@ func (p *polyOsc) calc(
 					}
 				}
 			}
-			gain := 1.0 - (1.0-float64(o.velocity)/127.0)*velSense
+			gain := velocityToGain(o.velocity, velSense)
 			out[i] += o.step(event) * gain
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {

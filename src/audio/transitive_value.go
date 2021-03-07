@@ -22,6 +22,27 @@ type transitiveValue struct {
 	pos          int
 }
 
+func newTransitiveValue() *transitiveValue {
+	return &transitiveValue{
+		kind:         transitionNone,
+		duration:     0,
+		endThreshold: 0,
+		initialValue: 0,
+		targetValue:  0,
+		value:        0,
+		pos:          0,
+	}
+}
+func (tv *transitiveValue) init(value float64) {
+	tv.kind = transitionNone
+	tv.duration = 0
+	tv.endThreshold = 0
+	tv.initialValue = 0
+	tv.targetValue = 0
+	tv.value = value
+	tv.pos = 0
+}
+
 func (tv *transitiveValue) lenear(duration float64, targetValue float64) {
 	tv.kind = transitionLinear
 	tv.duration = duration
