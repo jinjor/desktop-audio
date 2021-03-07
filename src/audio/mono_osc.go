@@ -12,7 +12,7 @@ func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
 			oscs:      []*osc{newOsc(false), newOsc(false)},
-			adsr:      &adsr{},
+			adsr:      &adsr{tvalue: &transitiveValue{}},
 			filter:    &filter{},
 			formant:   newFormant(),
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},

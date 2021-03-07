@@ -120,6 +120,6 @@ func newEnvelope() *envelope {
 	return &envelope{
 		enabled:     false,
 		destination: destNone,
-		adsr:        &adsr{},
+		adsr:        &adsr{tvalue: &transitiveValue{}},
 	}
 }

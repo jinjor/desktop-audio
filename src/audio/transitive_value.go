@@ -64,7 +64,7 @@ func (tv *transitiveValue) step() bool {
 	switch tv.kind {
 	case transitionLinear:
 		phaseTime := float64(tv.pos) * secPerSample * 1000 // ms
-		if phaseTime >= float64(tv.duration) {
+		if tv.duration == 0 || phaseTime >= float64(tv.duration) {
 			tv.end()
 			ended = true
 		} else {
@@ -74,6 +74,11 @@ func (tv *transitiveValue) step() bool {
 		}
 	case transitionExponential:
 		phaseTime := float64(tv.pos) * secPerSample * 1000 // ms
+		if tv.duration == 0 {
+			tv.end()
+			ended = true
+			break
+		}
 		t := phaseTime / float64(tv.duration)
 		tv.value = setTargetAtTime(tv.initialValue, tv.targetValue, t)
 		if math.Abs(tv.value-tv.targetValue) < tv.endThreshold {

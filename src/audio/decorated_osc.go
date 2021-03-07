@@ -108,5 +108,11 @@ func (o *decoratedOsc) step(event int) float64 {
 	}
 	value = o.filter.step(value, filterFreqRatio, o.envelopes)
 	value = o.formant.step(value)
+	if math.IsNaN(value) {
+		panic("found NaN")
+	}
+	if math.IsInf(value, 0) {
+		panic("found NaN")
+	}
 	return value
 }

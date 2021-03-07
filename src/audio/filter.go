@@ -119,6 +119,9 @@ func (f *filter) applyParams(p *filterParams) {
 	f.gain = p.gain
 	f.N = p.N
 }
+
+const maxFilterFreq = float64(sampleRate/2) - 10
+
 func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) float64 {
 	if !f.enabled {
 		return in
@@ -139,12 +142,14 @@ func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) floa
 			gainRatio *= envelope.getValue()
 		}
 	}
-	f.a, f.b = makeH(f.a, f.b, f.kind, f.N, f.freq*freqRatio, math.Pow(f.q, qExponent), f.gain*gainRatio)
+	freq := math.Min(f.freq*freqRatio, maxFilterFreq)
+	f.a, f.b = makeH(f.a, f.b, f.kind, f.N, freq, math.Pow(f.q, qExponent), f.gain*gainRatio)
 	pastLength := int(math.Max(float64(len(f.a)-1), float64(len(f.b))))
 	if len(f.past) < pastLength {
 		f.past = make([]float64, pastLength)
 	}
-	return calcFilterOneSample(in, f.a, f.b, f.past)
+	value := calcFilterOneSample(in, f.a, f.b, f.past)
+	return value
 }
 func makeH(
 	feedforward []float64,
