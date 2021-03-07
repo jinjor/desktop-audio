@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"math"
-	"math/rand"
 	"strconv"
 )
 
@@ -120,16 +119,16 @@ func newLfo() *lfo {
 		destination: destNone,
 		freqType:    "none",
 		amount:      0,
-		osc:         &osc{phase: rand.Float64() * 2.0 * math.Pi, level: 1.0, enabled: true},
+		osc:         newOsc(true),
 	}
 }
 
 func (l *lfo) applyParams(p *lfoParams) {
 	l.enabled = p.enabled
 	l.destination = p.destination
-	l.osc.kind = p.wave
+	l.osc.kind = p.wave // TODO
 	l.freqType = p.freqType
-	l.osc.freq = p.freq
+	l.osc.freq.value = p.freq // TODO
 	l.amount = p.amount
 }
 
@@ -150,13 +149,13 @@ func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float
 		ampRatio = 1.0 + (l.osc.step(lfoFreqRatio, 0.0)-1.0)/2.0*amount
 	case destFM:
 		amount := l.amount * amountGain
-		freqRatio = math.Pow(2.0, l.osc.step(career.freq*lfoFreqRatio, 0.0)*amount/100/12)
+		freqRatio = math.Pow(2.0, l.osc.step(career.freq.value*lfoFreqRatio, 0.0)*amount/100/12)
 	case destPM:
 		amount := l.amount * amountGain
-		phaseShift = l.osc.step(career.freq*lfoFreqRatio, 0.0) * amount
+		phaseShift = l.osc.step(career.freq.value*lfoFreqRatio, 0.0) * amount
 	case destAM:
 		amount := l.amount * amountGain
-		ampRatio = 1.0 + l.osc.step(career.freq*lfoFreqRatio, 0.0)*amount
+		ampRatio = 1.0 + l.osc.step(career.freq.value*lfoFreqRatio, 0.0)*amount
 	case destFilterFreq:
 		amount := l.amount * amountGain
 		filterFreqRatio = math.Pow(16.0, l.osc.step(lfoFreqRatio, 0.0)*amount)

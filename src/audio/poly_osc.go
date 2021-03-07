@@ -2,8 +2,6 @@ package audio
 
 import (
 	"log"
-	"math"
-	"math/rand"
 )
 
 type polyOsc struct {
@@ -14,7 +12,8 @@ type polyOsc struct {
 
 type noteOsc struct {
 	*decoratedOsc
-	note int
+	note     int
+	velocity int
 }
 
 func newPolyOsc() *polyOsc {
@@ -22,7 +21,7 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
+				oscs:      []*osc{newOsc(false), newOsc(false)},
 				adsr:      &adsr{},
 				filter:    &filter{},
 				formant:   newFormant(),
@@ -43,6 +42,7 @@ func (p *polyOsc) calc(
 	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
+	velSense float64,
 	echo *echo,
 	out []float64,
 ) {
@@ -60,8 +60,8 @@ func (p *polyOsc) calc(
 					p.pooled = p.pooled[:lenPooled-1]
 					p.active = append(p.active, o)
 					o.note = data.note
+					o.velocity = data.velocity
 					o.initWithNote(oscParams, data.note)
-					o.adsr.init(adsrParams)
 					o.applyParams(oscParams, adsrParams, filterParams, formantParams, lfoParams, envelopeParams)
 				} else {
 					log.Println("maxPoly exceeded")
@@ -83,7 +83,8 @@ func (p *polyOsc) calc(
 					}
 				}
 			}
-			out[i] += o.step(event)
+			gain := velocityToGain(o.velocity, velSense)
+			out[i] += o.step(event) * gain
 		}
 		for j := len(p.active) - 1; j >= 0; j-- {
 			o := p.active[j]

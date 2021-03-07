@@ -93,6 +93,27 @@ const GlideTime = React.memo(
     );
   }
 );
+const VelSense = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
+    const onChange = (value: number) =>
+      o.dispatch({ type: "changedVelSense", value });
+    const min = 0;
+    const max = 1;
+    const steps = 400;
+    return (
+      <LabeledKnob
+        min={min}
+        max={max}
+        steps={steps}
+        from={0}
+        exponential={true}
+        value={o.value}
+        onChange={onChange}
+        label="Sense"
+      />
+    );
+  }
+);
 type OSC = {
   enabled: boolean;
   kind: string;
@@ -1013,6 +1034,7 @@ const setItem = <T,>(array: T[], index: number, updates: Partial<T>): T[] => {
 const paramsDecoder = d.object({
   poly: d.string(),
   glideTime: d.number(),
+  velSense: d.number(),
   oscs: d.array(
     d.object({
       enabled: d.boolean,
@@ -1084,6 +1106,7 @@ type Action =
 type ParamsAction =
   | { type: "changedPoly"; value: string }
   | { type: "changedGlideTime"; value: number }
+  | { type: "changedVelSense"; value: number }
   | { type: "changedOscEnabled"; index: number; value: boolean }
   | { type: "changedOscKind"; index: number; value: string }
   | { type: "changedOscOctave"; index: number; value: number }
@@ -1123,6 +1146,7 @@ const App = () => {
     params: {
       poly: "mono",
       glideTime: 100,
+      velSense: 0,
       oscs: [
         {
           enabled: true,
@@ -1185,6 +1209,11 @@ const App = () => {
         const { value } = action;
         ipcRenderer.send("audio", ["set", "glide_time", value]);
         return { ...state, glideTime: value };
+      }
+      case "changedVelSense": {
+        const { value } = action;
+        ipcRenderer.send("audio", ["set", "vel_sense", value]);
+        return { ...state, velSense: value };
       }
       case "changedOscEnabled": {
         const { index, value } = action;
@@ -1595,10 +1624,11 @@ const App = () => {
   return (
     <React.Fragment>
       <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
-        <EditGroup label="POLY">
+        <EditGroup label="NOTE">
           <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
             <Poly value={p.poly} dispatch={dispatchParam} />
             <GlideTime value={p.glideTime} dispatch={dispatchParam} />
+            <VelSense value={p.velSense} dispatch={dispatchParam} />
           </div>
         </EditGroup>
         <OSCGroup index={0} value={p.oscs[0]} dispatch={dispatchParam} />

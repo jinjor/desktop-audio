@@ -91,6 +91,9 @@ func freqToNote(freq float64) int {
 	}
 	panic("infinite loop in freqToNote()")
 }
+func velocityToGain(velocity int, velSense float64) float64 {
+	return 1.0 - (1.0-float64(velocity)/127.0)*velSense
+}
 func toRawMessage(v interface{}) json.RawMessage {
 	bytes, err := json.Marshal(v)
 	if err != nil {
@@ -107,7 +110,8 @@ type midiEvent struct {
 }
 
 type noteOn struct {
-	note int
+	note     int
+	velocity int
 }
 type noteOff struct {
 	note int
@@ -156,7 +160,8 @@ type state struct {
 	envelopeParams []*envelopeParams
 	echoParams     *echoParams
 	polyMode       bool
-	glideTime      int // ms
+	glideTime      int     // ms
+	velSense       float64 // 0-1
 	monoOsc        *monoOsc
 	polyOsc        *polyOsc
 	echo           *echo
@@ -168,6 +173,7 @@ type state struct {
 type stateJSON struct {
 	Poly      string            `json:"poly"`
 	GlideTime int               `json:"glideTime"`
+	VelSense  float64           `json:"velSense"`
 	Oscs      []json.RawMessage `json:"oscs"`
 	Adsr      json.RawMessage   `json:"adsr"`
 	Filter    json.RawMessage   `json:"filter"`
@@ -188,6 +194,7 @@ func (s *state) applyJSON(data json.RawMessage) {
 	}
 	s.polyMode = j.Poly == "poly"
 	s.glideTime = j.GlideTime
+	s.velSense = j.VelSense
 	if len(j.Oscs) == len(s.oscParams) {
 		for i, j := range j.Oscs {
 			s.oscParams[i].applyJSON(j)
@@ -234,6 +241,7 @@ func (s *state) toJSON() json.RawMessage {
 	return toRawMessage(&stateJSON{
 		Poly:      poly,
 		GlideTime: s.glideTime,
+		VelSense:  s.velSense,
 		Oscs:      oscJsons,
 		Adsr:      s.adsrParams.toJSON(),
 		Filter:    s.filterParams.toJSON(),
@@ -256,6 +264,7 @@ func newState() *state {
 		echoParams:     &echoParams{},
 		polyMode:       false,
 		glideTime:      100,
+		velSense:       0,
 		monoOsc:        newMonoOsc(),
 		polyOsc:        newPolyOsc(),
 		echo:           &echo{delay: &delay{}},
@@ -329,9 +338,9 @@ func (a *Audio) Read(buf []byte) (int, error) {
 
 		a.state.echo.applyParams(a.state.echoParams)
 		if a.state.polyMode {
-			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.echo, out)
+			a.state.polyOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.echo, out)
 		} else {
-			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.glideTime, a.state.echo, out)
+			a.state.monoOsc.calc(a.state.events, a.state.oscParams, a.state.adsrParams, a.state.filterParams, a.state.formantParams, a.state.lfoParams, a.state.envelopeParams, a.state.velSense, a.state.glideTime, a.state.echo, out)
 		}
 		writeBuffer(a.state.out, offset, buf, 0)
 		writeBuffer(a.state.out, offset, buf, 1)
@@ -421,6 +430,13 @@ func (a *Audio) update(command []string) error {
 				return err
 			}
 			a.state.glideTime = int(value)
+		case "vel_sense":
+			command = command[1:]
+			value, err := strconv.ParseFloat(command[0], 64)
+			if err != nil {
+				return err
+			}
+			a.state.velSense = value
 		case "osc":
 			command = command[1:]
 			index, err := strconv.ParseInt(command[0], 10, 64)
@@ -514,7 +530,7 @@ func (a *Audio) update(command []string) error {
 		if err != nil {
 			return err
 		}
-		a.addMidiEvent(&noteOn{note: int(note)})
+		a.addMidiEvent(&noteOn{note: int(note), velocity: 127})
 	case "note_off":
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
@@ -637,7 +653,8 @@ func (a *Audio) AddMidiEvent(data []byte) {
 	} else if data[0]>>4 == 9 && data[2] > 0 {
 		log.Printf("got note-on: %v\n", data)
 		note := int(data[1])
-		a.addMidiEvent(&noteOn{note: note})
+		velocity := int(data[2])
+		a.addMidiEvent(&noteOn{note: note, velocity: velocity})
 	}
 }
 

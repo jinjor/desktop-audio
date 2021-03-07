@@ -3,7 +3,6 @@ package audio
 import (
 	"encoding/json"
 	"log"
-	"math"
 	"strconv"
 )
 
@@ -94,29 +93,20 @@ func (a *adsrParams) set(key string, value string) error {
     |a    |k  |d |      |r |
 */
 type adsr struct {
-	attack         float64 // ms
-	keep           float64 // ms
-	decay          float64 // ms
-	sustain        float64 // 0-1
-	release        float64 // ms
-	base           float64 // 0-1
-	peek           float64 // 0-1
-	value          float64
-	phase          int // "attack", "keep", "decay", "sustain", "release" nil
-	phasePos       int
-	valueAtNoteOn  float64
-	valueAtNoteOff float64
+	attack  float64 // ms
+	keep    float64 // ms
+	decay   float64 // ms
+	sustain float64 // 0-1
+	release float64 // ms
+	base    float64 // 0-1
+	peek    float64 // 0-1
+	phase   int     // "none", "attack", "keep", "decay", "sustain", "release"
+	tvalue  *transitiveValue
 }
 
-func (a *adsr) init(p *adsrParams) {
-	a.setParams(p)
-	a.value = 0
-	a.phase = phaseNone
-	a.phasePos = 0
-	a.valueAtNoteOn = 0
-	a.valueAtNoteOff = 0
+func (a *adsr) getValue() float64 {
+	return a.tvalue.value
 }
-
 func (a *adsr) setParams(p *adsrParams) {
 	a.base = 0
 	a.peek = 1
@@ -125,6 +115,9 @@ func (a *adsr) setParams(p *adsrParams) {
 	a.decay = p.decay
 	a.sustain = p.sustain
 	a.release = p.release
+	if a.tvalue == nil {
+		a.tvalue = &transitiveValue{}
+	}
 }
 func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 	if p.destination == destVibrato ||
@@ -156,84 +149,43 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 	a.decay = p.attack
 	a.sustain = a.base
 	a.release = 0
+	if a.tvalue == nil {
+		a.tvalue = &transitiveValue{}
+	}
+	a.tvalue.value = a.base
 }
 
 func (a *adsr) noteOn() {
 	a.phase = phaseAttack
-	a.phasePos = 0
-	a.valueAtNoteOn = a.value
+	a.tvalue.linear(a.attack, a.peek)
 }
 
 func (a *adsr) noteOff() {
 	a.phase = phaseRelease
-	a.phasePos = 0
-	a.valueAtNoteOff = a.value
+	a.tvalue.exponential(a.release, a.base, 0.001)
 }
 
 func (a *adsr) step() {
-	phaseTime := float64(a.phasePos) * secPerSample * 1000 // ms
 	switch a.phase {
 	case phaseAttack:
-		if phaseTime >= float64(a.attack) {
+		if a.tvalue.step() {
 			a.phase = phaseKeep
-			a.phasePos = 0
-			a.value = a.peek
-		} else {
-			t := phaseTime / float64(a.attack)
-			a.value = t*a.peek + (1-t)*a.valueAtNoteOn // TODO: don't use the same attack time
-			a.phasePos++
+			a.tvalue.linear(a.keep, a.peek)
 		}
 	case phaseKeep:
-		if phaseTime >= float64(a.keep) {
+		if a.tvalue.step() {
 			a.phase = phaseDecay
-			a.phasePos = 0
-		} else {
-			a.phasePos++
+			a.tvalue.exponential(a.decay, a.sustain, 0.001)
 		}
 	case phaseDecay:
-		ended := false
-		if a.decay == 0 {
-			ended = true
-		} else {
-			t := phaseTime / float64(a.decay)
-			a.value = setTargetAtTime(a.peek, a.sustain, t)
-			if math.Abs(a.value-a.sustain) < 0.001 {
-				ended = true
-			}
-		}
-		if ended {
+		if a.tvalue.step() {
 			a.phase = phaseSustain
-			a.phasePos = 0
-			a.value = float64(a.sustain)
-		} else {
-			a.phasePos++
 		}
 	case phaseSustain:
-		a.value = float64(a.sustain)
 	case phaseRelease:
-		ended := false
-		if a.release == 0 {
-			ended = true
-		} else {
-			t := phaseTime / float64(a.release)
-			a.value = setTargetAtTime(a.valueAtNoteOff, a.base, t)
-			if math.Abs(a.value-a.base) < 0.001 {
-				ended = true
-			}
-		}
-		if ended {
+		if a.tvalue.step() {
 			a.phase = phaseNone
-			a.phasePos = 0
-			a.value = a.base
-		} else {
-			a.phasePos++
 		}
 	default:
-		a.value = a.base
 	}
-}
-
-// 63% closer to target when pos=1.0
-func setTargetAtTime(initialValue float64, targetValue float64, pos float64) float64 {
-	return targetValue + (initialValue-targetValue)*math.Exp(-pos)
 }

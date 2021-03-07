@@ -1,28 +1,25 @@
 package audio
 
-import (
-	"math"
-	"math/rand"
-)
-
 // ----- MONO OSC ----- //
 
 type monoOsc struct {
 	o           *decoratedOsc
-	activeNotes []int
+	activeNotes []*noteOn
+	gain        *transitiveValue
 }
 
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
 		o: &decoratedOsc{
-			oscs:      []*osc{{phase: rand.Float64() * 2.0 * math.Pi}, {phase: rand.Float64() * 2.0 * math.Pi}},
+			oscs:      []*osc{newOsc(false), newOsc(false)},
 			adsr:      &adsr{},
 			filter:    &filter{},
 			formant:   newFormant(),
 			lfos:      []*lfo{newLfo(), newLfo(), newLfo()},
 			envelopes: []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
 		},
-		activeNotes: make([]int, 0, 128),
+		activeNotes: make([]*noteOn, 0, 128),
+		gain:        newTransitiveValue(),
 	}
 }
 
@@ -34,6 +31,7 @@ func (m *monoOsc) calc(
 	formantParams *formantParams,
 	lfoParams []*lfoParams,
 	envelopeParams []*envelopeParams,
+	velSense float64,
 	glideTime int,
 	echo *echo,
 	out []float64,
@@ -49,18 +47,22 @@ func (m *monoOsc) calc(
 					for i := len(m.activeNotes) - 1; i >= 1; i-- {
 						m.activeNotes[i] = m.activeNotes[i-1]
 					}
-					m.activeNotes[0] = data.note
+					m.activeNotes[0] = data
 					if len(m.activeNotes) == 1 {
 						m.o.initWithNote(oscParams, data.note)
+						gain := velocityToGain(data.velocity, velSense)
+						m.gain.init(gain)
 						event = enumNoteOn
 					} else {
-						m.o.glide(oscParams, m.activeNotes[0], glideTime)
+						m.o.glide(oscParams, m.activeNotes[0].note, glideTime)
+						gain := velocityToGain(data.velocity, velSense)
+						m.gain.exponential(float64(glideTime), gain, 0.001)
 					}
 				}
 			case *noteOff:
 				removed := 0
 				for i := 0; i < len(m.activeNotes); i++ {
-					if m.activeNotes[i] == data.note {
+					if m.activeNotes[i].note == data.note {
 						removed++
 					} else {
 						m.activeNotes[i-removed] = m.activeNotes[i]
@@ -68,13 +70,16 @@ func (m *monoOsc) calc(
 				}
 				m.activeNotes = m.activeNotes[:len(m.activeNotes)-removed]
 				if len(m.activeNotes) > 0 {
-					m.o.glide(oscParams, m.activeNotes[0], glideTime)
+					m.o.glide(oscParams, m.activeNotes[0].note, glideTime)
+					gain := velocityToGain(m.activeNotes[0].velocity, velSense)
+					m.gain.exponential(float64(glideTime), gain, 0.001)
 				} else {
 					event = enumNoteOff
 				}
 			}
 		}
-		out[i] = m.o.step(event)
-		out[i] = echo.step(out[i])
+		m.gain.step()
+		value := m.o.step(event) * m.gain.value
+		out[i] = echo.step(value)
 	}
 }

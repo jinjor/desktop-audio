@@ -130,13 +130,13 @@ func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) floa
 			continue
 		}
 		if envelope.destination == destFilterFreq {
-			freqRatio *= math.Pow(16.0, envelope.value)
+			freqRatio *= math.Pow(16.0, envelope.getValue())
 		}
 		if envelope.destination == destFilterQ || envelope.destination == destFilterQ0V {
-			qExponent *= envelope.value
+			qExponent *= envelope.getValue()
 		}
 		if envelope.destination == destFilterGain || envelope.destination == destFilterGain0V {
-			gainRatio *= envelope.value
+			gainRatio *= envelope.getValue()
 		}
 	}
 	f.a, f.b = makeH(f.a, f.b, f.kind, f.N, f.freq*freqRatio, math.Pow(f.q, qExponent), f.gain*gainRatio)
