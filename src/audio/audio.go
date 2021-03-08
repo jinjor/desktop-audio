@@ -151,130 +151,33 @@ func (c *Changes) Delete(key string) {
 
 type state struct {
 	sync.Mutex
-	events           [][]*midiEvent // length: samplesPerCycle * 2
-	oscParams        []*oscParams
-	adsrParams       *adsrParams
-	noteFilterParams *noteFilterParams
-	filterParams     *filterParams
-	formantParams    *formantParams
-	lfoParams        []*lfoParams
-	envelopeParams   []*envelopeParams
-	echoParams       *echoParams
-	polyMode         bool
-	glideTime        int     // ms
-	velSense         float64 // 0-1
-	monoOsc          *monoOsc
-	polyOsc          *polyOsc
-	echo             *echo
-	pos              int64
-	out              []float64 // length: fftSize
-	lastRead         float64
-	processTime      float64
-}
-type stateJSON struct {
-	Poly       string            `json:"poly"`
-	GlideTime  int               `json:"glideTime"`
-	VelSense   float64           `json:"velSense"`
-	Oscs       []json.RawMessage `json:"oscs"`
-	Adsr       json.RawMessage   `json:"adsr"`
-	NoteFilter json.RawMessage   `json:"noteFilter"`
-	Filter     json.RawMessage   `json:"filter"`
-	Formant    json.RawMessage   `json:"formant"`
-	Lfos       []json.RawMessage `json:"lfos"`
-	Envelopes  []json.RawMessage `json:"envelopes"`
-	Echo       json.RawMessage   `json:"echo"`
+	*params
+	events      [][]*midiEvent // length: samplesPerCycle * 2
+	monoOsc     *monoOsc
+	polyOsc     *polyOsc
+	echo        *echo
+	pos         int64
+	out         []float64 // length: fftSize
+	lastRead    float64
+	processTime float64
 }
 
 func (s *state) applyJSON(data json.RawMessage) {
-	var j stateJSON
-	err := json.Unmarshal(data, &j)
-	if err != nil {
-		log.Println(err)
-		log.Println(data)
-		log.Println("failed to apply JSON to state")
-		return
-	}
-	s.polyMode = j.Poly == "poly"
-	s.glideTime = j.GlideTime
-	s.velSense = j.VelSense
-	if len(j.Oscs) == len(s.oscParams) {
-		for i, j := range j.Oscs {
-			s.oscParams[i].applyJSON(j)
-		}
-	} else {
-		log.Println("failed to apply JSON to osc params")
-	}
-	s.adsrParams.applyJSON(j.Adsr)
-	s.noteFilterParams.applyJSON(j.NoteFilter)
-	s.filterParams.applyJSON(j.Filter)
-	s.formantParams.applyJSON(j.Formant)
-	if len(j.Lfos) == len(s.lfoParams) {
-		for i, j := range j.Lfos {
-			s.lfoParams[i].applyJSON(j)
-		}
-	} else {
-		log.Println("failed to apply JSON to lfo params")
-	}
-	if len(j.Envelopes) == len(s.envelopeParams) {
-		for i, j := range j.Envelopes {
-			s.envelopeParams[i].applyJSON(j)
-		}
-	} else {
-		log.Println("failed to apply JSON to envelope params")
-	}
-	s.echoParams.applyJSON(j.Echo)
+	s.params.applyJSON(data)
 }
 func (s *state) toJSON() json.RawMessage {
-	oscJsons := make([]json.RawMessage, len(s.oscParams))
-	for i, oscParam := range s.oscParams {
-		oscJsons[i] = oscParam.toJSON()
-	}
-	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
-	for i, lfoParam := range s.lfoParams {
-		lfoJsons[i] = lfoParam.toJSON()
-	}
-	envelopeJsons := make([]json.RawMessage, len(s.envelopeParams))
-	for i, envelopeParam := range s.envelopeParams {
-		envelopeJsons[i] = envelopeParam.toJSON()
-	}
-	poly := "mono"
-	if s.polyMode {
-		poly = "poly"
-	}
-	return toRawMessage(&stateJSON{
-		Poly:       poly,
-		GlideTime:  s.glideTime,
-		VelSense:   s.velSense,
-		Oscs:       oscJsons,
-		Adsr:       s.adsrParams.toJSON(),
-		NoteFilter: s.noteFilterParams.toJSON(),
-		Filter:     s.filterParams.toJSON(),
-		Formant:    s.formantParams.toJSON(),
-		Lfos:       lfoJsons,
-		Envelopes:  envelopeJsons,
-		Echo:       s.echoParams.toJSON(),
-	})
+	return s.params.toJSON()
 }
 
 func newState() *state {
 	return &state{
-		events:           make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:        []*oscParams{{kind: waveSine, level: 1.0}, {kind: waveSine, level: 1.0}},
-		adsrParams:       &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
-		lfoParams:        []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
-		noteFilterParams: &noteFilterParams{kind: filterNone, q: 1, gain: 0},
-		filterParams:     &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
-		formantParams:    &formantParams{kind: formantA, tone: 1, q: 1},
-		envelopeParams:   []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
-		echoParams:       &echoParams{},
-		polyMode:         false,
-		glideTime:        100,
-		velSense:         0,
-		monoOsc:          newMonoOsc(),
-		polyOsc:          newPolyOsc(),
-		echo:             &echo{delay: &delay{}},
-		pos:              0,
-		out:              make([]float64, fftSize),
+		events:  make([][]*midiEvent, samplesPerCycle*2),
+		params:  newParams(),
+		monoOsc: newMonoOsc(),
+		polyOsc: newPolyOsc(),
+		echo:    &echo{delay: &delay{}},
+		pos:     0,
+		out:     make([]float64, fftSize),
 	}
 }
 
@@ -421,11 +324,10 @@ func processCommands(audio *Audio, commandCh <-chan []string) {
 }
 
 func (a *Audio) update(command []string) error {
-	a.state.Lock()
-	defer a.state.Unlock()
-
 	switch command[0] {
 	case "set":
+		a.state.Lock()
+		defer a.state.Unlock()
 		command = command[1:]
 		switch command[0] {
 		case "glide_time":
@@ -535,23 +437,45 @@ func (a *Audio) update(command []string) error {
 		}
 		a.Changes.Add("data")
 	case "mono":
+		a.state.Lock()
+		defer a.state.Unlock()
 		a.state.polyMode = false
 		a.Changes.Add("data")
 	case "poly":
+		a.state.Lock()
+		defer a.state.Unlock()
 		a.state.polyMode = true
 		a.Changes.Add("data")
 	case "note_on":
+		a.state.Lock()
+		defer a.state.Unlock()
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
 			return err
 		}
 		a.addMidiEvent(&noteOn{note: int(note), velocity: 127})
 	case "note_off":
+		a.state.Lock()
+		defer a.state.Unlock()
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
 			return err
 		}
 		a.addMidiEvent(&noteOff{note: int(note)})
+	case "preset":
+		command = command[1:]
+		switch command[0] {
+		case "list":
+			a.Changes.Add("preset_list")
+		case "load":
+			a.Changes.Add("preset")
+		case "save":
+			a.Changes.Add("preset_list")
+		case "save_as":
+			a.Changes.Add("preset_list")
+		case "delete":
+			a.Changes.Add("preset_list")
+		}
 	default:
 		return fmt.Errorf("unknown command %v", command[0])
 	}
