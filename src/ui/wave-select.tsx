@@ -25,31 +25,31 @@ const waveNameToIconParams = (value: string) => {
 
 const sine = {
   d: "M -8,0 Q -4 -13 0 0 T 8 0",
-  "stroke-width": 2.2,
+  strokeWidth: 2.2,
 };
 const triangle = {
   d: "M -8,0 L -4,-7 4,7 8,0",
-  "stroke-width": 2,
+  strokeWidth: 2,
 };
 const square = {
   d: "M -8,0 L -8,-6 0,-6 0,6 8,6 8,0",
-  "stroke-width": 2,
+  strokeWidth: 2,
 };
 const pulse = {
   d: "M -8,0 L -8,-6 -4,-6 -4,6 8,6 8,0",
-  "stroke-width": 2,
+  strokeWidth: 2,
 };
 const saw = {
   d: "M -8,6 L 7,-6 7,6",
-  "stroke-width": 2,
+  strokeWidth: 2,
 };
 const sawRev = {
   d: "M -7,6 L -7,-6 8,6",
-  "stroke-width": 2,
+  strokeWidth: 2,
 };
 const noise = {
   d: "M -8,0 L -6,-2 -4,6 -2,-8 0,5 2,-5 4,7 6,-4 8,2",
-  "stroke-width": 2,
+  strokeWidth: 2,
 };
 
 export const WaveSelect = (o: {
@@ -73,6 +73,7 @@ export const WaveSelect = (o: {
         const params = waveNameToIconParams(item);
         return (
           <Option
+            key={item}
             size={size}
             selected={selected}
             params={params}
