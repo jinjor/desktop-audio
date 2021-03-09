@@ -162,13 +162,6 @@ type state struct {
 	processTime float64
 }
 
-func (s *state) applyJSON(data json.RawMessage) {
-	s.params.applyJSON(data)
-}
-func (s *state) toJSON() json.RawMessage {
-	return s.params.toJSON()
-}
-
 func newState() *state {
 	return &state{
 		events:  make([][]*midiEvent, samplesPerCycle*2),
@@ -185,50 +178,16 @@ func newState() *state {
 
 // Audio ...
 type Audio struct {
-	ctx        context.Context
-	otoContext *oto.Context
-	CommandCh  chan []string
-	state      *state
-	Changes    *Changes
-	fftResult  []float64 // length: fftSize
+	ctx           context.Context
+	otoContext    *oto.Context
+	presetManager *presetManager
+	CommandCh     chan []string
+	state         *state
+	Changes       *Changes
+	fftResult     []float64 // length: fftSize
 }
 
 var _ io.Reader = (*Audio)(nil)
-
-type audioJSON struct {
-	State json.RawMessage `json:"state"`
-	// additional context...
-}
-
-// ApplyJSON ...
-func (a *Audio) ApplyJSON(data []byte) {
-	a.state.Lock()
-	defer a.state.Unlock()
-	var audioJSON audioJSON
-	err := json.Unmarshal(data, &audioJSON)
-	if err != nil {
-		log.Println("failed to apply JSON to Audio", err)
-		return
-	}
-	a.state.applyJSON(audioJSON.State)
-}
-
-// ToJSON ...
-func (a *Audio) ToJSON() []byte {
-	a.state.Lock()
-	defer a.state.Unlock()
-	bytes, err := json.Marshal(a.toJSON())
-	if err != nil {
-		panic(err)
-	}
-	return bytes
-}
-
-func (a *Audio) toJSON() json.RawMessage {
-	return toRawMessage(&audioJSON{
-		State: a.state.toJSON(),
-	})
-}
 
 func (a *Audio) Read(buf []byte) (int, error) {
 	select {
@@ -293,17 +252,18 @@ func writeBuffer(out []float64, outOffset int64, buf []byte, ch int) {
 }
 
 // NewAudio ...
-func NewAudio() (*Audio, error) {
+func NewAudio(presetDir string) (*Audio, error) {
 	otoContext, err := oto.NewContext(sampleRate, channelNum, bitDepthInBytes, bufferSizeInBytes)
 	if err != nil {
 		return nil, err
 	}
 	commandCh := make(chan []string, 256)
 	audio := &Audio{
-		ctx:        context.Background(),
-		otoContext: otoContext,
-		CommandCh:  commandCh,
-		state:      newState(),
+		ctx:           context.Background(),
+		otoContext:    otoContext,
+		presetManager: newPresetManager(presetDir),
+		CommandCh:     commandCh,
+		state:         newState(),
 		Changes: &Changes{
 			dict: make(map[string]struct{}),
 		},
@@ -479,6 +439,35 @@ func (a *Audio) update(command []string) error {
 	default:
 		return fmt.Errorf("unknown command %v", command[0])
 	}
+	return nil
+}
+
+// RestoreLastParams ...
+func (a *Audio) RestoreLastParams() error {
+	a.state.Lock() // TODO: too long lock
+	defer a.state.Unlock()
+	found, err := a.presetManager.restoreLastParams(a.state.params)
+	if err != nil {
+		return err
+	}
+	if found {
+		log.Println("loaded temporary file in ", a.presetManager.dir)
+	} else {
+		log.Println("temporary file not found in ", a.presetManager.dir)
+	}
+	a.Changes.Add("all_params") // always exists
+	return nil
+}
+
+// SaveTemporaryData ...
+func (a *Audio) SaveTemporaryData() error {
+	a.state.Lock() // TODO: too long lock
+	defer a.state.Unlock()
+	err := a.presetManager.saveTemporaryData(a.state.params)
+	if err != nil {
+		return err
+	}
+	log.Println("saved temporary file in ", a.presetManager.dir)
 	return nil
 }
 

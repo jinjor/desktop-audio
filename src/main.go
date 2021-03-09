@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/url"
@@ -22,7 +21,7 @@ import (
 )
 
 const sockFileName = "/tmp/desktop-audio.sock"
-const dataFileName = "work/data.json"
+const presetDir = "work/presets"
 
 func main() {
 	flag.Parse()
@@ -33,21 +32,16 @@ func main() {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	a, err := audio.NewAudio()
+	a, err := audio.NewAudio(presetDir)
 	if err != nil {
 		log.Fatalf("error: %v\n", err)
 	}
 	defer a.Close()
 
-	bytes, err := ioutil.ReadFile(dataFileName)
+	err = a.RestoreLastParams()
 	if err != nil {
-		log.Println(err)
-		log.Println("failed to load data at", dataFileName)
-	} else {
-		log.Println("loaded data at", dataFileName)
-		a.ApplyJSON(bytes)
+		log.Fatalf("error: %v\n", err)
 	}
-	a.Changes.Add("all_params") // always exists
 
 	midiIn := audio.ListenToMidiIn(ctx)
 	go func() {
@@ -241,10 +235,10 @@ loop:
 		case _ = <-t.C:
 			if audio.Changes.Has("data") {
 				audio.Changes.Delete("data")
-				j := audio.ToJSON()
-				log.Println(string(j))
-				ioutil.WriteFile(dataFileName, j, 0666)
-				log.Println("saved data at", dataFileName)
+				err := audio.SaveTemporaryData()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

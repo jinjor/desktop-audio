@@ -21,7 +21,7 @@ func newPolyOsc() *polyOsc {
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
 			decoratedOsc: &decoratedOsc{
-				oscs:       []*osc{newOsc(false), newOsc(false)},
+				oscs:       []*osc{newOsc(true), newOsc(false)},
 				adsr:       &adsr{tvalue: &transitiveValue{}},
 				noteFilter: &noteFilter{filter: &filter{}},
 				filter:     &filter{},

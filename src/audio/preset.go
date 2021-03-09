@@ -3,6 +3,8 @@ package audio
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
+	"os"
 )
 
 type presetMetaJSON struct {
@@ -27,7 +29,6 @@ func newPresetManager(dir string) *presetManager {
 		dir: dir,
 	}
 }
-
 func (pm *presetManager) getList() ([]*presetMeta, error) {
 	if pm.data == nil {
 		pm.loadData()
@@ -62,4 +63,20 @@ func (pm *presetManager) loadData() error {
 		pm.data.list[i] = &presetMeta{name: item.Name}
 	}
 	return nil
+}
+func (pm *presetManager) restoreLastParams(p *params) (bool, error) {
+	path := pm.dir + "/_tmp.json"
+	bytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return false, nil
+	}
+	p.applyJSON(bytes)
+	return true, nil
+}
+func (pm *presetManager) saveTemporaryData(p *params) error {
+	os.MkdirAll(pm.dir, os.ModePerm)
+	path := pm.dir + "/_tmp.json"
+	j := p.toJSON()
+	log.Println(string(j))
+	return ioutil.WriteFile(path, j, 0666)
 }

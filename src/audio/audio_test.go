@@ -35,7 +35,7 @@ func benchmark(t *testing.T, audio *Audio, commands [][]string) {
 }
 
 func TestBenchmark(t *testing.T) {
-	audio, err := NewAudio()
+	audio, err := NewAudio("work/preset")
 	expectNoError(t, err)
 	defer expectNoError(t, audio.Close())
 
