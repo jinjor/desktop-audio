@@ -8,6 +8,7 @@ import { noteFilterDecoder } from "./note-filter";
 import { filterDecoder } from "./filter";
 import { formantDecoder } from "./formant";
 import { echoDecoder } from "./echo";
+import { PresetMeta, presetMetaDecoder } from "./preset";
 
 const paramsDecoder = d.object({
   poly: d.string(),
@@ -22,17 +23,28 @@ const paramsDecoder = d.object({
   formant: formantDecoder,
   echo: echoDecoder,
 });
+const allParamsDecoder = d.object({
+  name: d.optional(d.string(), null),
+  params: paramsDecoder,
+});
 const statusDecoder = d.object({
   polyphony: d.number(),
   processTime: d.number(),
 });
-const stateDecoder = d.object({
-  params: paramsDecoder,
-  status: statusDecoder,
+const presetListDecoder = d.object({
+  items: d.array(presetMetaDecoder),
 });
 type Params = d.TypeOf<typeof paramsDecoder>;
-export type State = d.TypeOf<typeof stateDecoder>;
+type Status = d.TypeOf<typeof statusDecoder>;
+export type State = {
+  presets: PresetMeta[];
+  name: string | null;
+  params: Params;
+  status: Status;
+};
 export const initialState: State = {
+  presets: [],
+  name: null,
   params: {
     poly: "mono",
     glideTime: 100,
@@ -100,7 +112,8 @@ export const initialState: State = {
 
 export type Action =
   | { type: "receivedCommand"; command: string[] }
-  | { type: "paramsAction"; value: ParamsAction };
+  | { type: "paramsAction"; value: ParamsAction }
+  | { type: "changedPreset"; value: string };
 export type ParamsAction =
   | { type: "changedPoly"; value: string }
   | { type: "changedGlideTime"; value: number }
@@ -153,10 +166,17 @@ export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "receivedCommand": {
       const { command } = action;
+      if (command[0] === "preset_list") {
+        const obj = JSON.parse(command[1]);
+        console.log(obj);
+        const { items } = presetListDecoder.run(obj);
+        return { ...state, presets: items };
+      }
       if (command[0] === "all_params") {
         const obj = JSON.parse(command[1]);
         console.log(obj);
-        return { ...state, params: paramsDecoder.run(obj) };
+        const { name, params } = allParamsDecoder.run(obj);
+        return { ...state, name, params };
       }
       if (command[0] === "status") {
         const obj = JSON.parse(command[1]);
@@ -168,6 +188,11 @@ export const reducer = (state: State, action: Action): State => {
     case "paramsAction": {
       const { value } = action;
       return { ...state, params: paramsReducer(state.params, value) };
+    }
+    case "changedPreset": {
+      const { value } = action;
+      ipcRenderer.send("audio", ["preset", "load", value]);
+      return { ...state, name: value };
     }
   }
 };

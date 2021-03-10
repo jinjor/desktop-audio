@@ -173,12 +173,21 @@ loop:
 			if audio.Changes.Has("all_params") {
 				audio.Changes.Delete("all_params")
 				j := audio.GetParamsJSON()
-				s := "all_params " + url.QueryEscape(string(j))
+				s := "all_params " + url.PathEscape(string(j))
+				conn.Write([]byte(s + "\n"))
+			}
+			if audio.Changes.Has("preset_list") {
+				audio.Changes.Delete("preset_list")
+				j, err := audio.GetPresetListJSON()
+				if err != nil {
+					panic(err)
+				}
+				s := "preset_list " + url.PathEscape(string(j))
 				conn.Write([]byte(s + "\n"))
 			}
 			if count%15 == 0 {
 				j := audio.GetStatusJSON()
-				s := "status " + url.QueryEscape(string(j))
+				s := "status " + url.PathEscape(string(j))
 				conn.Write([]byte(s + "\n"))
 			}
 			if audio.Changes.Has("fft") {

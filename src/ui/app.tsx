@@ -12,6 +12,7 @@ import { EnvelopeGroup } from "./envelope";
 import { EchoGroup } from "./echo";
 import { ModeGroup } from "./mode";
 import { FormantGroup } from "./formant";
+import { Presets } from "./preset";
 
 const Canvas = (props: {
   listen: (canvas: HTMLCanvasElement) => () => void;
@@ -132,6 +133,9 @@ const App = () => {
   const processTimeLimit = 0.0213; // TODO: get this from server
   return (
     <React.Fragment>
+      <div>
+        <Presets list={state.presets} name={state.name} dispatch={dispatch} />
+      </div>
       <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
         <ModeGroup
           poly={p.poly}

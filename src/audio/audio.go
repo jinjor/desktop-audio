@@ -428,13 +428,45 @@ func (a *Audio) update(command []string) error {
 		case "list":
 			a.Changes.Add("preset_list")
 		case "load":
-			a.Changes.Add("preset")
+			name := command[1]
+			exists, err := a.presetManager.existsInList(name)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return fmt.Errorf("preset \"" + name + "\" does not exist")
+			}
+			err = a.presetManager.applyToParams(name, a.state.params)
+			if err != nil {
+				return err
+			}
+			a.Changes.Add("all_params")
 		case "save":
-			a.Changes.Add("preset_list")
+			listUpdated, err := a.presetManager.overrideParams(a.state.params)
+			if err != nil {
+				return err
+			}
+			if listUpdated {
+				a.Changes.Add("preset_list")
+			}
 		case "save_as":
-			a.Changes.Add("preset_list")
-		case "delete":
-			a.Changes.Add("preset_list")
+			name := command[1]
+			listUpdated, err := a.presetManager.saveParams(name, a.state.params)
+			if err != nil {
+				return err
+			}
+			if listUpdated {
+				a.Changes.Add("preset_list")
+			}
+		case "remove":
+			name := command[1]
+			listUpdated, err := a.presetManager.remove(name)
+			if err != nil {
+				return err
+			}
+			if listUpdated {
+				a.Changes.Add("preset_list")
+			}
 		}
 	default:
 		return fmt.Errorf("unknown command %v", command[0])
@@ -455,7 +487,8 @@ func (a *Audio) RestoreLastParams() error {
 	} else {
 		log.Println("temporary file not found in ", a.presetManager.dir)
 	}
-	a.Changes.Add("all_params") // always exists
+	a.Changes.Add("all_params")
+	a.Changes.Add("preset_list")
 	return nil
 }
 
@@ -463,7 +496,7 @@ func (a *Audio) RestoreLastParams() error {
 func (a *Audio) SaveTemporaryData() error {
 	a.state.Lock() // TODO: too long lock
 	defer a.state.Unlock()
-	err := a.presetManager.saveTemporaryData(a.state.params)
+	err := a.presetManager.saveTemporaryParams(a.state.params)
 	if err != nil {
 		return err
 	}
@@ -496,15 +529,29 @@ func (a *Audio) Start(ctx context.Context) error {
 	return nil
 }
 
+type allParamsJSON struct {
+	Name   *string         `json:"name"`
+	Params json.RawMessage `json:"params"`
+}
+
 // GetParamsJSON ...
-func (a *Audio) GetParamsJSON() []byte {
+func (a *Audio) GetParamsJSON() json.RawMessage {
 	a.state.Lock()
 	defer a.state.Unlock()
-	bytes, err := json.Marshal(a.state.toJSON())
-	if err != nil {
-		panic(err)
+	var nameOrNull *string
+	name := a.presetManager.selected
+	if name != "" {
+		nameOrNull = &name
 	}
-	return bytes
+	return toRawMessage(&allParamsJSON{
+		Name:   nameOrNull,
+		Params: a.state.params.toJSON(),
+	})
+}
+
+// GetPresetListJSON ...
+func (a *Audio) GetPresetListJSON() (json.RawMessage, error) {
+	return a.presetManager.listToJSON()
 }
 
 var filterShapeFeedforward = []float64{}
