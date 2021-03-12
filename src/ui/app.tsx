@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
 import ReactDOM from "react-dom";
-import React, { useEffect, useRef, useReducer, useCallback } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { Notes } from "./note";
 import { initialState, ParamsAction, reducer } from "./state";
 import { OSCGroup } from "./osc";
@@ -12,7 +12,8 @@ import { EnvelopeGroup } from "./envelope";
 import { EchoGroup } from "./echo";
 import { ModeGroup } from "./mode";
 import { FormantGroup } from "./formant";
-import { Presets } from "./preset";
+import { Presets, PresetSaver, PresetSaverAction } from "./preset";
+import { useReducerWithEffect } from "./react-util";
 
 const Canvas = (props: {
   listen: (canvas: HTMLCanvasElement) => () => void;
@@ -110,7 +111,7 @@ function renderFrequencyShape(
 }
 
 const App = () => {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducerWithEffect(reducer, initialState);
   useEffect(() => {
     const callback = (_: any, command: string[]) => {
       dispatch({ type: "receivedCommand", command });
@@ -129,12 +130,25 @@ const App = () => {
     },
     []
   );
+  const dispatchPresetSaver: React.Dispatch<PresetSaverAction> = useCallback(
+    (action: PresetSaverAction) => {
+      dispatch({
+        type: "presetSaverAction",
+        value: action,
+      });
+    },
+    []
+  );
   const p = state.params;
   const processTimeLimit = 0.0213; // TODO: get this from server
   return (
     <React.Fragment>
       <div>
         <Presets list={state.presets} name={state.name} dispatch={dispatch} />
+        <button onClick={() => dispatch({ type: "openPresetSaver" })}>
+          Save
+        </button>
+        <PresetSaver state={state.presetSaver} dispatch={dispatchPresetSaver} />
       </div>
       <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
         <ModeGroup

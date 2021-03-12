@@ -6,7 +6,7 @@ const checkGroups = new Map<string, MemoCheck>();
 const threshold = 30;
 let checkEnabled = false;
 setTimeout(() => {
-  checkEnabled = true;
+  // checkEnabled = true;
 }, 3000);
 export const checkRenderingExclusive = (group: string, name: string) => {
   if (!checkEnabled) {
