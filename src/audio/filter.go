@@ -31,20 +31,22 @@ EOF
 // ----- Filter Params ----- //
 
 type filterParams struct {
-	enabled bool
-	kind    int
-	freq    float64
-	q       float64
-	gain    float64
-	N       int
+	enabled   bool
+	targetOsc int
+	kind      int
+	freq      float64
+	q         float64
+	gain      float64
+	N         int
 }
 
 type filterJSON struct {
-	Enabled bool    `json:"enabled"`
-	Kind    string  `json:"kind"`
-	Freq    float64 `json:"freq"`
-	Q       float64 `json:"q"`
-	Gain    float64 `json:"gain"`
+	Enabled   bool    `json:"enabled"`
+	TargetOsc string  `json:"targetOsc"`
+	Kind      string  `json:"kind"`
+	Freq      float64 `json:"freq"`
+	Q         float64 `json:"q"`
+	Gain      float64 `json:"gain"`
 }
 
 func (f *filterParams) applyJSON(data json.RawMessage) {
@@ -55,6 +57,7 @@ func (f *filterParams) applyJSON(data json.RawMessage) {
 		return
 	}
 	f.enabled = j.Enabled
+	f.targetOsc = targetOscFromString(j.TargetOsc)
 	f.kind = filterKindFromString(j.Kind)
 	f.freq = j.Freq
 	f.q = j.Q
@@ -62,17 +65,20 @@ func (f *filterParams) applyJSON(data json.RawMessage) {
 }
 func (f *filterParams) toJSON() json.RawMessage {
 	return toRawMessage(&filterJSON{
-		Enabled: f.enabled,
-		Kind:    filterKindToString(f.kind),
-		Freq:    f.freq,
-		Q:       f.q,
-		Gain:    f.gain,
+		Enabled:   f.enabled,
+		Kind:      filterKindToString(f.kind),
+		TargetOsc: targetOscToString(f.targetOsc),
+		Freq:      f.freq,
+		Q:         f.q,
+		Gain:      f.gain,
 	})
 }
 func (f *filterParams) set(key string, value string) error {
 	switch key {
 	case "enabled":
 		f.enabled = value == "true"
+	case "target_osc":
+		f.targetOsc = targetOscFromString(value)
 	case "kind":
 		f.kind = filterKindFromString(value)
 	case "freq":
@@ -100,23 +106,23 @@ func (f *filterParams) set(key string, value string) error {
 // ----- Note Filter Params ----- //
 
 type noteFilterParams struct {
-	enabled bool
-	kind    int
-	baseOsc int
-	octave  int
-	coarse  int
-	q       float64
-	gain    float64
+	enabled   bool
+	targetOsc int
+	kind      int
+	octave    int
+	coarse    int
+	q         float64
+	gain      float64
 }
 
 type noteFilterJSON struct {
-	Enabled bool    `json:"enabled"`
-	Kind    string  `json:"kind"`
-	BaseOsc int     `json:"baseOsc"`
-	Octave  int     `json:"octave"`
-	Coarse  int     `json:"coarse"`
-	Q       float64 `json:"q"`
-	Gain    float64 `json:"gain"`
+	Enabled   bool    `json:"enabled"`
+	TargetOsc string  `json:"targetOsc"`
+	Kind      string  `json:"kind"`
+	Octave    int     `json:"octave"`
+	Coarse    int     `json:"coarse"`
+	Q         float64 `json:"q"`
+	Gain      float64 `json:"gain"`
 }
 
 func (f *noteFilterParams) applyJSON(data json.RawMessage) {
@@ -127,8 +133,8 @@ func (f *noteFilterParams) applyJSON(data json.RawMessage) {
 		return
 	}
 	f.enabled = j.Enabled
+	f.targetOsc = targetOscFromString(j.TargetOsc)
 	f.kind = filterKindFromString(j.Kind)
-	f.baseOsc = j.BaseOsc
 	f.octave = j.Octave
 	f.coarse = j.Coarse
 	f.q = j.Q
@@ -136,27 +142,23 @@ func (f *noteFilterParams) applyJSON(data json.RawMessage) {
 }
 func (f *noteFilterParams) toJSON() json.RawMessage {
 	return toRawMessage(&noteFilterJSON{
-		Enabled: f.enabled,
-		Kind:    filterKindToString(f.kind),
-		BaseOsc: f.baseOsc,
-		Octave:  f.octave,
-		Coarse:  f.coarse,
-		Q:       f.q,
-		Gain:    f.gain,
+		Enabled:   f.enabled,
+		TargetOsc: targetOscToString(f.targetOsc),
+		Kind:      filterKindToString(f.kind),
+		Octave:    f.octave,
+		Coarse:    f.coarse,
+		Q:         f.q,
+		Gain:      f.gain,
 	})
 }
 func (f *noteFilterParams) set(key string, value string) error {
 	switch key {
 	case "enabled":
 		f.enabled = value == "true"
+	case "target_osc":
+		f.targetOsc = targetOscFromString(value)
 	case "kind":
 		f.kind = filterKindFromString(value)
-	case "base_osc":
-		baseOsc, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return err
-		}
-		f.baseOsc = int(baseOsc)
 	case "octave":
 		octave, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
@@ -188,20 +190,26 @@ func (f *noteFilterParams) set(key string, value string) error {
 // ----- Filter ----- //
 
 type filter struct {
-	enabled bool
-	kind    int
-	freq    float64
-	q       float64
-	gain    float64
-	N       int
-	a       []float64 // feedforward
-	b       []float64 // feedback
-	past    []float64
+	enabled   bool
+	kind      int
+	targetOsc int
+	freq      float64
+	q         float64
+	gain      float64
+	N         int
+	a         []float64 // feedforward
+	b         []float64 // feedback
+	past      []float64
+}
+
+func newFilter() *filter {
+	return &filter{}
 }
 
 func (f *filter) applyParams(p *filterParams) {
 	f.enabled = p.enabled
 	f.kind = p.kind
+	f.targetOsc = p.targetOsc
 	f.freq = p.freq
 	f.q = p.q
 	f.gain = p.gain
@@ -296,17 +304,32 @@ func calcFilterOneSample(in float64, a []float64, b []float64, past []float64) f
 	return o
 }
 
+//go:generate go run ../gen/main.go -- target_osc.gen.go
+/*
+generate-enum targetOsc
+
+targetOscAll all
+targetOsc0 0
+targetOsc1 1
+
+EOF
+*/
+
 type noteFilter struct {
 	*filter
-	baseOsc int
-	octave  int
-	coarse  int
+	targetOsc int
+	octave    int
+	coarse    int
+}
+
+func newNoteFilter() *noteFilter {
+	return &noteFilter{filter: newFilter()}
 }
 
 func (f *noteFilter) applyParams(p *noteFilterParams) {
 	f.enabled = p.enabled
 	f.kind = p.kind
-	f.baseOsc = p.baseOsc
+	f.targetOsc = p.targetOsc
 	f.octave = p.octave
 	f.coarse = p.coarse
 	f.q = p.q

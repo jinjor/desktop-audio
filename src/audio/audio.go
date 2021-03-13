@@ -560,7 +560,7 @@ var filterShapeFeedback = []float64{}
 // GetFilterShape ...
 func (a *Audio) GetFilterShape() []float64 {
 	a.state.Lock()
-	filter := &filter{}
+	filter := newFilter()
 	filter.applyParams(a.state.filterParams)
 	formant := newFormant()
 	formant.applyParams(a.state.formantParams)

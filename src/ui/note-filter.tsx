@@ -8,7 +8,7 @@ import { checkRenderingExclusive } from "./debug";
 
 export const noteFilterDecoder = d.object({
   enabled: d.boolean,
-  baseOsc: d.number(),
+  targetOsc: d.string(),
   kind: d.string(),
   octave: d.number(),
   coarse: d.number(),
@@ -34,8 +34,11 @@ export const NoteFilterGroup = React.memo(
         onChangeEnabled={onChangeNoteFilterEnabled}
       >
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
+          <NoteFilterTargetOsc
+            dispatch={o.dispatch}
+            value={o.value.targetOsc}
+          />
           <NoteFilterKind dispatch={o.dispatch} value={o.value.kind} />
-          <NoteFilterBaseOsc dispatch={o.dispatch} value={o.value.baseOsc} />
           <NoteFilterOctave dispatch={o.dispatch} value={o.value.octave} />
           <NoteFilterCoarse dispatch={o.dispatch} value={o.value.coarse} />
           <NoteFilterQ dispatch={o.dispatch} value={o.value.q} />
@@ -68,15 +71,22 @@ const NoteFilterKind = React.memo(
     );
   }
 );
-const NoteFilterBaseOsc = React.memo(
-  (o: { dispatch: React.Dispatch<ParamsAction>; value: number }) => {
-    const list = ["OSC 1", "OSC 2"];
+const NoteFilterTargetOsc = React.memo(
+  (o: { dispatch: React.Dispatch<ParamsAction>; value: string }) => {
+    const theirList = ["all", "0", "1"];
+    const ourList = ["OSC 1 & 2", "OSC 1", "OSC 2"];
     const onChange = (value: string) =>
       o.dispatch({
-        type: "changedNoteFilterBaseOsc",
-        value: list.indexOf(value),
+        type: "changedNoteFilterTargetOsc",
+        value: theirList[ourList.indexOf(value)],
       });
-    return <Select list={list} value={list[o.value]} onChange={onChange} />;
+    return (
+      <Select
+        list={ourList}
+        value={ourList[theirList.indexOf(o.value)]}
+        onChange={onChange}
+      />
+    );
   }
 );
 const NoteFilterOctave = React.memo(

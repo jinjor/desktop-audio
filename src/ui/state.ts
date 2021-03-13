@@ -83,7 +83,7 @@ export const initialState: State = {
     },
     noteFilter: {
       enabled: false,
-      baseOsc: 0,
+      targetOsc: "all",
       kind: "none",
       octave: 0,
       coarse: 0,
@@ -92,6 +92,7 @@ export const initialState: State = {
     },
     filter: {
       enabled: false,
+      targetOsc: "all",
       kind: "none",
       freq: 1000,
       q: 0,
@@ -150,13 +151,14 @@ export type ParamsAction =
   | { type: "changedEnvelopeAttack"; index: number; value: number }
   | { type: "changedEnvelopeAmount"; index: number; value: number }
   | { type: "changedNoteFilterEnabled"; value: boolean }
-  | { type: "changedNoteFilterBaseOsc"; value: number }
+  | { type: "changedNoteFilterTargetOsc"; value: string }
   | { type: "changedNoteFilterKind"; value: string }
   | { type: "changedNoteFilterOctave"; value: number }
   | { type: "changedNoteFilterCoarse"; value: number }
   | { type: "changedNoteFilterQ"; value: number }
   | { type: "changedNoteFilterGain"; value: number }
   | { type: "changedFilterEnabled"; value: boolean }
+  | { type: "changedFilterTargetOsc"; value: string }
   | { type: "changedFilterKind"; value: string }
   | { type: "changedFilterFreq"; value: number }
   | { type: "changedFilterQ"; value: number }
@@ -472,12 +474,12 @@ const paramsReducer = (state: Params, action: ParamsAction): Params => {
         noteFilter: { ...state.noteFilter, enabled: value },
       };
     }
-    case "changedNoteFilterBaseOsc": {
+    case "changedNoteFilterTargetOsc": {
       const { value } = action;
-      ipcRenderer.send("audio", ["set", "note_filter", "base_osc", value]);
+      ipcRenderer.send("audio", ["set", "note_filter", "target_osc", value]);
       return {
         ...state,
-        noteFilter: { ...state.noteFilter, baseOsc: value },
+        noteFilter: { ...state.noteFilter, targetOsc: value },
       };
     }
     case "changedNoteFilterKind": {
@@ -526,6 +528,14 @@ const paramsReducer = (state: Params, action: ParamsAction): Params => {
       return {
         ...state,
         filter: { ...state.filter, enabled: value },
+      };
+    }
+    case "changedFilterTargetOsc": {
+      const { value } = action;
+      ipcRenderer.send("audio", ["set", "filter", "target_osc", value]);
+      return {
+        ...state,
+        filter: { ...state.filter, targetOsc: value },
       };
     }
     case "changedFilterKind": {

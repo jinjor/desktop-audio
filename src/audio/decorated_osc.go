@@ -18,8 +18,8 @@ func newDecoratedOsc() *decoratedOsc {
 	return &decoratedOsc{
 		oscs:       []*osc{newOsc(true), newOsc(false)},
 		adsr:       &adsr{tvalue: &transitiveValue{}},
-		noteFilter: &noteFilter{filter: &filter{}},
-		filter:     &filter{},
+		noteFilter: newNoteFilter(),
+		filter:     newFilter(),
 		formant:    newFormant(),
 		lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
 		envelopes:  []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
@@ -118,11 +118,24 @@ func (o *decoratedOsc) step(event int) float64 {
 		}
 	}
 	value := 0.0
-	for _, osc := range o.oscs {
-		value += osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.getValue()
+	for i, osc := range o.oscs {
+		v := osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.getValue()
+		if i == 0 && o.noteFilter.targetOsc == targetOsc0 ||
+			i == 1 && o.noteFilter.targetOsc == targetOsc1 {
+			v = o.noteFilter.step(v, filterFreqRatio, o.envelopes, o.oscs[0].freq.value*freqRatio) // TODO: use original freq of note
+		}
+		if i == 0 && o.filter.targetOsc == targetOsc0 ||
+			i == 1 && o.filter.targetOsc == targetOsc1 {
+			v = o.filter.step(v, filterFreqRatio, o.envelopes)
+		}
+		value += v
 	}
-	value = o.noteFilter.step(value, filterFreqRatio, o.envelopes, o.oscs[o.noteFilter.baseOsc].freq.value*freqRatio)
-	value = o.filter.step(value, filterFreqRatio, o.envelopes)
+	if o.noteFilter.targetOsc == targetOscAll {
+		value = o.noteFilter.step(value, filterFreqRatio, o.envelopes, o.oscs[0].freq.value*freqRatio) // TODO: use original freq of note
+	}
+	if o.filter.targetOsc == targetOscAll {
+		value = o.filter.step(value, filterFreqRatio, o.envelopes)
+	}
 	value = o.formant.step(value)
 	if math.IsNaN(value) {
 		panic("found NaN")
