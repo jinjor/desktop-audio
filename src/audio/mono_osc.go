@@ -10,15 +10,7 @@ type monoOsc struct {
 
 func newMonoOsc() *monoOsc {
 	return &monoOsc{
-		o: &decoratedOsc{
-			oscs:       []*osc{newOsc(true), newOsc(false)},
-			adsr:       &adsr{tvalue: &transitiveValue{}},
-			noteFilter: &noteFilter{filter: &filter{}},
-			filter:     &filter{},
-			formant:    newFormant(),
-			lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
-			envelopes:  []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
-		},
+		o:           newDecoratedOsc(),
 		activeNotes: make([]*noteOn, 0, 128),
 		gain:        newTransitiveValue(),
 	}

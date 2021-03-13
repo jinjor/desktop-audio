@@ -20,15 +20,7 @@ func newPolyOsc() *polyOsc {
 	pooled := make([]*noteOsc, maxPoly)
 	for i := 0; i < len(pooled); i++ {
 		pooled[i] = &noteOsc{
-			decoratedOsc: &decoratedOsc{
-				oscs:       []*osc{newOsc(true), newOsc(false)},
-				adsr:       &adsr{tvalue: &transitiveValue{}},
-				noteFilter: &noteFilter{filter: &filter{}},
-				filter:     &filter{},
-				formant:    newFormant(),
-				lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
-				envelopes:  []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
-			},
+			decoratedOsc: newDecoratedOsc(),
 		}
 	}
 	return &polyOsc{

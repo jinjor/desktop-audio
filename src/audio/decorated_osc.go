@@ -14,6 +14,18 @@ type decoratedOsc struct {
 	envelopes  []*envelope
 }
 
+func newDecoratedOsc() *decoratedOsc {
+	return &decoratedOsc{
+		oscs:       []*osc{newOsc(true), newOsc(false)},
+		adsr:       &adsr{tvalue: &transitiveValue{}},
+		noteFilter: &noteFilter{filter: &filter{}},
+		filter:     &filter{},
+		formant:    newFormant(),
+		lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
+		envelopes:  []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+	}
+}
+
 const (
 	enumNoEvent = iota
 	enumNoteOn
