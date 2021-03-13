@@ -151,130 +151,26 @@ func (c *Changes) Delete(key string) {
 
 type state struct {
 	sync.Mutex
-	events           [][]*midiEvent // length: samplesPerCycle * 2
-	oscParams        []*oscParams
-	adsrParams       *adsrParams
-	noteFilterParams *noteFilterParams
-	filterParams     *filterParams
-	formantParams    *formantParams
-	lfoParams        []*lfoParams
-	envelopeParams   []*envelopeParams
-	echoParams       *echoParams
-	polyMode         bool
-	glideTime        int     // ms
-	velSense         float64 // 0-1
-	monoOsc          *monoOsc
-	polyOsc          *polyOsc
-	echo             *echo
-	pos              int64
-	out              []float64 // length: fftSize
-	lastRead         float64
-	processTime      float64
-}
-type stateJSON struct {
-	Poly       string            `json:"poly"`
-	GlideTime  int               `json:"glideTime"`
-	VelSense   float64           `json:"velSense"`
-	Oscs       []json.RawMessage `json:"oscs"`
-	Adsr       json.RawMessage   `json:"adsr"`
-	NoteFilter json.RawMessage   `json:"noteFilter"`
-	Filter     json.RawMessage   `json:"filter"`
-	Formant    json.RawMessage   `json:"formant"`
-	Lfos       []json.RawMessage `json:"lfos"`
-	Envelopes  []json.RawMessage `json:"envelopes"`
-	Echo       json.RawMessage   `json:"echo"`
-}
-
-func (s *state) applyJSON(data json.RawMessage) {
-	var j stateJSON
-	err := json.Unmarshal(data, &j)
-	if err != nil {
-		log.Println(err)
-		log.Println(data)
-		log.Println("failed to apply JSON to state")
-		return
-	}
-	s.polyMode = j.Poly == "poly"
-	s.glideTime = j.GlideTime
-	s.velSense = j.VelSense
-	if len(j.Oscs) == len(s.oscParams) {
-		for i, j := range j.Oscs {
-			s.oscParams[i].applyJSON(j)
-		}
-	} else {
-		log.Println("failed to apply JSON to osc params")
-	}
-	s.adsrParams.applyJSON(j.Adsr)
-	s.noteFilterParams.applyJSON(j.NoteFilter)
-	s.filterParams.applyJSON(j.Filter)
-	s.formantParams.applyJSON(j.Formant)
-	if len(j.Lfos) == len(s.lfoParams) {
-		for i, j := range j.Lfos {
-			s.lfoParams[i].applyJSON(j)
-		}
-	} else {
-		log.Println("failed to apply JSON to lfo params")
-	}
-	if len(j.Envelopes) == len(s.envelopeParams) {
-		for i, j := range j.Envelopes {
-			s.envelopeParams[i].applyJSON(j)
-		}
-	} else {
-		log.Println("failed to apply JSON to envelope params")
-	}
-	s.echoParams.applyJSON(j.Echo)
-}
-func (s *state) toJSON() json.RawMessage {
-	oscJsons := make([]json.RawMessage, len(s.oscParams))
-	for i, oscParam := range s.oscParams {
-		oscJsons[i] = oscParam.toJSON()
-	}
-	lfoJsons := make([]json.RawMessage, len(s.lfoParams))
-	for i, lfoParam := range s.lfoParams {
-		lfoJsons[i] = lfoParam.toJSON()
-	}
-	envelopeJsons := make([]json.RawMessage, len(s.envelopeParams))
-	for i, envelopeParam := range s.envelopeParams {
-		envelopeJsons[i] = envelopeParam.toJSON()
-	}
-	poly := "mono"
-	if s.polyMode {
-		poly = "poly"
-	}
-	return toRawMessage(&stateJSON{
-		Poly:       poly,
-		GlideTime:  s.glideTime,
-		VelSense:   s.velSense,
-		Oscs:       oscJsons,
-		Adsr:       s.adsrParams.toJSON(),
-		NoteFilter: s.noteFilterParams.toJSON(),
-		Filter:     s.filterParams.toJSON(),
-		Formant:    s.formantParams.toJSON(),
-		Lfos:       lfoJsons,
-		Envelopes:  envelopeJsons,
-		Echo:       s.echoParams.toJSON(),
-	})
+	*params
+	events      [][]*midiEvent // length: samplesPerCycle * 2
+	monoOsc     *monoOsc
+	polyOsc     *polyOsc
+	echo        *echo
+	pos         int64
+	out         []float64 // length: fftSize
+	lastRead    float64
+	processTime float64
 }
 
 func newState() *state {
 	return &state{
-		events:           make([][]*midiEvent, samplesPerCycle*2),
-		oscParams:        []*oscParams{{kind: waveSine, level: 1.0}, {kind: waveSine, level: 1.0}},
-		adsrParams:       &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
-		lfoParams:        []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
-		noteFilterParams: &noteFilterParams{kind: filterNone, q: 1, gain: 0},
-		filterParams:     &filterParams{kind: filterNone, freq: 1000, q: 1, gain: 0, N: 50},
-		formantParams:    &formantParams{kind: formantA, tone: 1, q: 1},
-		envelopeParams:   []*envelopeParams{newEnvelopeParams(), newEnvelopeParams(), newEnvelopeParams()},
-		echoParams:       &echoParams{},
-		polyMode:         false,
-		glideTime:        100,
-		velSense:         0,
-		monoOsc:          newMonoOsc(),
-		polyOsc:          newPolyOsc(),
-		echo:             &echo{delay: &delay{}},
-		pos:              0,
-		out:              make([]float64, fftSize),
+		events:  make([][]*midiEvent, samplesPerCycle*2),
+		params:  newParams(),
+		monoOsc: newMonoOsc(),
+		polyOsc: newPolyOsc(),
+		echo:    &echo{delay: &delay{}},
+		pos:     0,
+		out:     make([]float64, fftSize),
 	}
 }
 
@@ -282,50 +178,16 @@ func newState() *state {
 
 // Audio ...
 type Audio struct {
-	ctx        context.Context
-	otoContext *oto.Context
-	CommandCh  chan []string
-	state      *state
-	Changes    *Changes
-	fftResult  []float64 // length: fftSize
+	ctx           context.Context
+	otoContext    *oto.Context
+	presetManager *presetManager
+	CommandCh     chan []string
+	state         *state
+	Changes       *Changes
+	fftResult     []float64 // length: fftSize
 }
 
 var _ io.Reader = (*Audio)(nil)
-
-type audioJSON struct {
-	State json.RawMessage `json:"state"`
-	// additional context...
-}
-
-// ApplyJSON ...
-func (a *Audio) ApplyJSON(data []byte) {
-	a.state.Lock()
-	defer a.state.Unlock()
-	var audioJSON audioJSON
-	err := json.Unmarshal(data, &audioJSON)
-	if err != nil {
-		log.Println("failed to apply JSON to Audio", err)
-		return
-	}
-	a.state.applyJSON(audioJSON.State)
-}
-
-// ToJSON ...
-func (a *Audio) ToJSON() []byte {
-	a.state.Lock()
-	defer a.state.Unlock()
-	bytes, err := json.Marshal(a.toJSON())
-	if err != nil {
-		panic(err)
-	}
-	return bytes
-}
-
-func (a *Audio) toJSON() json.RawMessage {
-	return toRawMessage(&audioJSON{
-		State: a.state.toJSON(),
-	})
-}
 
 func (a *Audio) Read(buf []byte) (int, error) {
 	select {
@@ -390,17 +252,18 @@ func writeBuffer(out []float64, outOffset int64, buf []byte, ch int) {
 }
 
 // NewAudio ...
-func NewAudio() (*Audio, error) {
+func NewAudio(presetDir string) (*Audio, error) {
 	otoContext, err := oto.NewContext(sampleRate, channelNum, bitDepthInBytes, bufferSizeInBytes)
 	if err != nil {
 		return nil, err
 	}
 	commandCh := make(chan []string, 256)
 	audio := &Audio{
-		ctx:        context.Background(),
-		otoContext: otoContext,
-		CommandCh:  commandCh,
-		state:      newState(),
+		ctx:           context.Background(),
+		otoContext:    otoContext,
+		presetManager: newPresetManager(presetDir),
+		CommandCh:     commandCh,
+		state:         newState(),
 		Changes: &Changes{
 			dict: make(map[string]struct{}),
 		},
@@ -421,11 +284,10 @@ func processCommands(audio *Audio, commandCh <-chan []string) {
 }
 
 func (a *Audio) update(command []string) error {
-	a.state.Lock()
-	defer a.state.Unlock()
-
 	switch command[0] {
 	case "set":
+		a.state.Lock()
+		defer a.state.Unlock()
 		command = command[1:]
 		switch command[0] {
 		case "glide_time":
@@ -535,26 +397,110 @@ func (a *Audio) update(command []string) error {
 		}
 		a.Changes.Add("data")
 	case "mono":
+		a.state.Lock()
+		defer a.state.Unlock()
 		a.state.polyMode = false
 		a.Changes.Add("data")
 	case "poly":
+		a.state.Lock()
+		defer a.state.Unlock()
 		a.state.polyMode = true
 		a.Changes.Add("data")
 	case "note_on":
+		a.state.Lock()
+		defer a.state.Unlock()
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
 			return err
 		}
 		a.addMidiEvent(&noteOn{note: int(note), velocity: 127})
 	case "note_off":
+		a.state.Lock()
+		defer a.state.Unlock()
 		note, err := strconv.ParseInt(command[1], 10, 32)
 		if err != nil {
 			return err
 		}
 		a.addMidiEvent(&noteOff{note: int(note)})
+	case "preset":
+		command = command[1:]
+		switch command[0] {
+		case "list":
+			a.Changes.Add("preset_list")
+		case "load":
+			name := command[1]
+			exists, err := a.presetManager.existsInList(name)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return fmt.Errorf("preset \"" + name + "\" does not exist")
+			}
+			err = a.presetManager.applyToParams(name, a.state.params)
+			if err != nil {
+				return err
+			}
+			a.Changes.Add("all_params")
+		case "save":
+			listUpdated, err := a.presetManager.overrideParams(a.state.params)
+			if err != nil {
+				return err
+			}
+			if listUpdated {
+				a.Changes.Add("preset_list")
+			}
+		case "save_as":
+			name := command[1]
+			listUpdated, err := a.presetManager.saveParams(name, a.state.params)
+			if err != nil {
+				return err
+			}
+			if listUpdated {
+				a.Changes.Add("preset_list")
+			}
+		case "remove":
+			name := command[1]
+			listUpdated, err := a.presetManager.remove(name)
+			if err != nil {
+				return err
+			}
+			if listUpdated {
+				a.Changes.Add("preset_list")
+			}
+		}
 	default:
 		return fmt.Errorf("unknown command %v", command[0])
 	}
+	return nil
+}
+
+// RestoreLastParams ...
+func (a *Audio) RestoreLastParams() error {
+	a.state.Lock() // TODO: too long lock
+	defer a.state.Unlock()
+	found, err := a.presetManager.restoreLastParams(a.state.params)
+	if err != nil {
+		return err
+	}
+	if found {
+		log.Println("loaded temporary file in ", a.presetManager.dir)
+	} else {
+		log.Println("temporary file not found in ", a.presetManager.dir)
+	}
+	a.Changes.Add("all_params")
+	a.Changes.Add("preset_list")
+	return nil
+}
+
+// SaveTemporaryData ...
+func (a *Audio) SaveTemporaryData() error {
+	a.state.Lock() // TODO: too long lock
+	defer a.state.Unlock()
+	err := a.presetManager.saveTemporaryParams(a.state.params)
+	if err != nil {
+		return err
+	}
+	log.Println("saved temporary file in ", a.presetManager.dir)
 	return nil
 }
 
@@ -583,15 +529,29 @@ func (a *Audio) Start(ctx context.Context) error {
 	return nil
 }
 
+type allParamsJSON struct {
+	Name   *string         `json:"name"`
+	Params json.RawMessage `json:"params"`
+}
+
 // GetParamsJSON ...
-func (a *Audio) GetParamsJSON() []byte {
+func (a *Audio) GetParamsJSON() json.RawMessage {
 	a.state.Lock()
 	defer a.state.Unlock()
-	bytes, err := json.Marshal(a.state.toJSON())
-	if err != nil {
-		panic(err)
+	var nameOrNull *string
+	name := a.presetManager.selected
+	if name != "" {
+		nameOrNull = &name
 	}
-	return bytes
+	return toRawMessage(&allParamsJSON{
+		Name:   nameOrNull,
+		Params: a.state.params.toJSON(),
+	})
+}
+
+// GetPresetListJSON ...
+func (a *Audio) GetPresetListJSON() (json.RawMessage, error) {
+	return a.presetManager.listToJSON()
 }
 
 var filterShapeFeedforward = []float64{}

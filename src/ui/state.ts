@@ -8,6 +8,15 @@ import { noteFilterDecoder } from "./note-filter";
 import { filterDecoder } from "./filter";
 import { formantDecoder } from "./formant";
 import { echoDecoder } from "./echo";
+import {
+  presetMetaDecoder,
+  PresetAction,
+  presetReducer,
+  PresetState,
+  initialPresetState,
+  setPresetList,
+} from "./preset";
+import { ReducerWithEffect, ScheduleFn } from "./react-util";
 
 const paramsDecoder = d.object({
   poly: d.string(),
@@ -22,17 +31,28 @@ const paramsDecoder = d.object({
   formant: formantDecoder,
   echo: echoDecoder,
 });
+const allParamsDecoder = d.object({
+  name: d.optional(d.string(), null),
+  params: paramsDecoder,
+});
 const statusDecoder = d.object({
   polyphony: d.number(),
   processTime: d.number(),
 });
-const stateDecoder = d.object({
-  params: paramsDecoder,
-  status: statusDecoder,
+const presetListDecoder = d.object({
+  items: d.array(presetMetaDecoder),
 });
 type Params = d.TypeOf<typeof paramsDecoder>;
-export type State = d.TypeOf<typeof stateDecoder>;
+type Status = d.TypeOf<typeof statusDecoder>;
+export type State = {
+  preset: PresetState;
+  name: string | null;
+  params: Params;
+  status: Status;
+};
 export const initialState: State = {
+  preset: initialPresetState,
+  name: null,
   params: {
     poly: "mono",
     glideTime: 100,
@@ -100,7 +120,11 @@ export const initialState: State = {
 
 export type Action =
   | { type: "receivedCommand"; command: string[] }
-  | { type: "paramsAction"; value: ParamsAction };
+  | { type: "paramsAction"; value: ParamsAction }
+  | { type: "presetAction"; value: PresetAction }
+  | { type: "loadPreset"; value: string }
+  | { type: "savePreset"; value: string }
+  | { type: "removePreset"; value: string };
 export type ParamsAction =
   | { type: "changedPoly"; value: string }
   | { type: "changedGlideTime"; value: number }
@@ -149,14 +173,26 @@ export type ParamsAction =
 const setItem = <T>(array: T[], index: number, updates: Partial<T>): T[] => {
   return array.map((item, i) => (i === index ? { ...item, ...updates } : item));
 };
-export const reducer = (state: State, action: Action): State => {
+
+export const reducer: ReducerWithEffect<State, Action> = (
+  state: State,
+  action: Action,
+  schedule: ScheduleFn<Action>
+) => {
   switch (action.type) {
     case "receivedCommand": {
       const { command } = action;
+      if (command[0] === "preset_list") {
+        const obj = JSON.parse(command[1]);
+        console.log(obj);
+        const { items } = presetListDecoder.run(obj);
+        return { ...state, preset: setPresetList(state.preset, items) };
+      }
       if (command[0] === "all_params") {
         const obj = JSON.parse(command[1]);
         console.log(obj);
-        return { ...state, params: paramsDecoder.run(obj) };
+        const { name, params } = allParamsDecoder.run(obj);
+        return { ...state, name, params };
       }
       if (command[0] === "status") {
         const obj = JSON.parse(command[1]);
@@ -168,6 +204,27 @@ export const reducer = (state: State, action: Action): State => {
     case "paramsAction": {
       const { value } = action;
       return { ...state, params: paramsReducer(state.params, value) };
+    }
+    case "presetAction": {
+      console.log(action);
+      const { value } = action;
+      const preset = presetReducer(state.preset, value, schedule);
+      return { ...state, preset };
+    }
+    case "loadPreset": {
+      const { value } = action;
+      ipcRenderer.send("audio", ["preset", "load", value]);
+      return state;
+    }
+    case "savePreset": {
+      const { value } = action;
+      ipcRenderer.send("audio", ["preset", "save_as", value]);
+      return state;
+    }
+    case "removePreset": {
+      const { value } = action;
+      ipcRenderer.send("audio", ["preset", "remove", value]);
+      return state;
     }
   }
 };
