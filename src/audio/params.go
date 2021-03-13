@@ -21,7 +21,7 @@ type params struct {
 
 func newParams() *params {
 	return &params{
-		oscParams:        []*oscParams{{kind: waveSine, level: 1.0}, {kind: waveSine, level: 1.0}},
+		oscParams:        []*oscParams{{enabled: true, kind: waveSine, level: 1.0}, {enabled: false, kind: waveSine, level: 1.0}},
 		adsrParams:       &adsrParams{attack: 10, decay: 100, sustain: 0.7, release: 200},
 		lfoParams:        []*lfoParams{newLfoParams(), newLfoParams(), newLfoParams()},
 		noteFilterParams: &noteFilterParams{kind: filterNone, q: 1, gain: 0},
