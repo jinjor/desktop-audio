@@ -218,25 +218,9 @@ func (f *filter) applyParams(p *filterParams) {
 
 const maxFilterFreq = float64(sampleRate/2) - 10
 
-func (f *filter) step(in float64, freqRatio float64, envelopes []*envelope) float64 {
+func (f *filter) step(in float64, freqRatio float64, qExponent float64, gainRatio float64) float64 {
 	if !f.enabled {
 		return in
-	}
-	qExponent := 1.0
-	gainRatio := 1.0
-	for _, envelope := range envelopes {
-		if !envelope.enabled {
-			continue
-		}
-		if envelope.destination == destFilterFreq {
-			freqRatio *= math.Pow(16.0, envelope.getValue())
-		}
-		if envelope.destination == destFilterQ || envelope.destination == destFilterQ0V {
-			qExponent *= envelope.getValue()
-		}
-		if envelope.destination == destFilterGain || envelope.destination == destFilterGain0V {
-			gainRatio *= envelope.getValue()
-		}
 	}
 	freq := math.Min(f.freq*freqRatio, maxFilterFreq)
 	f.a, f.b = makeH(f.a, f.b, f.kind, f.N, freq, math.Pow(f.q, qExponent), f.gain*gainRatio)
@@ -336,9 +320,9 @@ func (f *noteFilter) applyParams(p *noteFilterParams) {
 	f.gain = p.gain
 	f.N = 0
 }
-func (f *noteFilter) step(in float64, freqRatio float64, envelopes []*envelope, freq float64) float64 {
+func (f *noteFilter) step(in float64, freqRatio float64, qExponent float64, gainRatio float64, freq float64) float64 {
 	f.filter.freq = freq * math.Pow(2, float64(f.octave)+float64(f.coarse)/12)
-	return f.filter.step(in, freqRatio, envelopes)
+	return f.filter.step(in, freqRatio, qExponent, gainRatio)
 }
 
 // ----- Calculation ----- //

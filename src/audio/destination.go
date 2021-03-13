@@ -7,12 +7,19 @@ package audio
 generate-enum destination
 
 destNone none
+destOsc0Volume osc0_volume
+destOsc1Volume osc1_volume
 destVibrato vibrato
 destTremolo tremolo
 destFM fm
 destPM pm
 destAM am
 destFreq freq
+destNoteFilterFreq note_filter_freq
+destNoteFilterQ note_filter_q
+destNoteFilterQ0V note_filter_q_0v
+destNoteFilterGain note_filter_gain
+destNoteFilterGain0V note_filter_gain_0v
 destFilterFreq filter_freq
 destFilterQ filter_q
 destFilterQ0V filter_q_0v
@@ -28,5 +35,6 @@ destLfo2Amount lfo2_amount
 EOF
 */
 
+var destOscVolume = [2]int{destOsc0Volume, destOsc1Volume}
 var destLfoFreq = [3]int{destLfo0Freq, destLfo1Freq, destLfo2Freq}
 var destLfoAmount = [3]int{destLfo0Amount, destLfo1Amount, destLfo2Amount}

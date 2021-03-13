@@ -122,6 +122,8 @@ func (a *adsr) setParams(p *adsrParams) {
 func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 	if p.destination == destVibrato ||
 		p.destination == destTremolo ||
+		p.destination == destNoteFilterQ0V ||
+		p.destination == destNoteFilterGain0V ||
 		p.destination == destFilterQ0V ||
 		p.destination == destFilterGain0V ||
 		p.destination == destLfo0Amount ||
@@ -131,6 +133,7 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 		a.base = 1
 		a.peek = 0
 	} else if p.destination == destFreq ||
+		p.destination == destNoteFilterFreq ||
 		p.destination == destFilterFreq ||
 		p.destination == destLfo0Freq ||
 		p.destination == destLfo1Freq ||
@@ -138,7 +141,10 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 		// amount-to-value
 		a.base = 0
 		a.peek = p.amount
-	} else if p.destination == destFilterQ ||
+	} else if p.destination == destOsc0Volume ||
+		p.destination == destOsc1Volume ||
+		p.destination == destNoteFilterQ ||
+		p.destination == destFilterQ ||
 		p.destination == destFilterGain {
 		// value-to-zero
 		a.base = 0

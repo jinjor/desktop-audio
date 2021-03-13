@@ -17,9 +17,44 @@ envelopeDestinations.set("none", {
   maxDelay: 0,
   defaultDelay: 0,
 });
+envelopeDestinations.set("osc0_volume", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
+envelopeDestinations.set("osc1_volume", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
 envelopeDestinations.set("freq", {
   minDelay: 0,
   maxDelay: 0,
+  defaultDelay: 0,
+});
+envelopeDestinations.set("note_filter_freq", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
+envelopeDestinations.set("note_filter_q", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
+envelopeDestinations.set("note_filter_q_0v", {
+  minDelay: 0,
+  maxDelay: 1000,
+  defaultDelay: 0,
+});
+envelopeDestinations.set("note_filter_gain", {
+  minDelay: 0,
+  maxDelay: 0,
+  defaultDelay: 0,
+});
+envelopeDestinations.set("note_filter_gain_0v", {
+  minDelay: 0,
+  maxDelay: 1000,
   defaultDelay: 0,
 });
 envelopeDestinations.set("filter_freq", {

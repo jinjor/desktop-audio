@@ -147,7 +147,7 @@ func (f *formant) step(in float64) float64 {
 	}
 	out := 0.0
 	for _, filter := range f.filters {
-		out += filter.step(in, f.tone, nil)
+		out += filter.step(in, f.tone, 1.0, 1.0)
 	}
 	return out * 1.5
 }

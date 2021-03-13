@@ -78,6 +78,16 @@ lfoDestinations.set("am", {
   defaultAmount: 0,
   fromAmount: 0,
 });
+lfoDestinations.set("note_filter_freq", {
+  freqType: "absolute",
+  minFreq: 0,
+  maxFreq: 40,
+  defaultFreq: 10,
+  minAmount: 0,
+  maxAmount: 1,
+  defaultAmount: 0,
+  fromAmount: 0,
+});
 lfoDestinations.set("filter_freq", {
   freqType: "absolute",
   minFreq: 0,

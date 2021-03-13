@@ -4,12 +4,19 @@ package audio
 
 const (
 	destNone = iota
+	destOsc0Volume
+	destOsc1Volume
 	destVibrato
 	destTremolo
 	destFM
 	destPM
 	destAM
 	destFreq
+	destNoteFilterFreq
+	destNoteFilterQ
+	destNoteFilterQ0V
+	destNoteFilterGain
+	destNoteFilterGain0V
 	destFilterFreq
 	destFilterQ
 	destFilterQ0V
@@ -27,6 +34,10 @@ func destinationFromString(s string) int {
 	switch s {
 	case "none":
 		return destNone
+	case "osc0_volume":
+		return destOsc0Volume
+	case "osc1_volume":
+		return destOsc1Volume
 	case "vibrato":
 		return destVibrato
 	case "tremolo":
@@ -39,6 +50,16 @@ func destinationFromString(s string) int {
 		return destAM
 	case "freq":
 		return destFreq
+	case "note_filter_freq":
+		return destNoteFilterFreq
+	case "note_filter_q":
+		return destNoteFilterQ
+	case "note_filter_q_0v":
+		return destNoteFilterQ0V
+	case "note_filter_gain":
+		return destNoteFilterGain
+	case "note_filter_gain_0v":
+		return destNoteFilterGain0V
 	case "filter_freq":
 		return destFilterFreq
 	case "filter_q":
@@ -68,6 +89,10 @@ func destinationToString(d int) string {
 	switch d {
 	case destNone:
 		return "none"
+	case destOsc0Volume:
+		return "osc0_volume"
+	case destOsc1Volume:
+		return "osc1_volume"
 	case destVibrato:
 		return "vibrato"
 	case destTremolo:
@@ -80,6 +105,16 @@ func destinationToString(d int) string {
 		return "am"
 	case destFreq:
 		return "freq"
+	case destNoteFilterFreq:
+		return "note_filter_freq"
+	case destNoteFilterQ:
+		return "note_filter_q"
+	case destNoteFilterQ0V:
+		return "note_filter_q_0v"
+	case destNoteFilterGain:
+		return "note_filter_gain"
+	case destNoteFilterGain0V:
+		return "note_filter_gain_0v"
 	case destFilterFreq:
 		return "filter_freq"
 	case destFilterQ:

@@ -572,7 +572,7 @@ func (a *Audio) GetFilterShape() []float64 {
 		if i == 0 {
 			in = 1.0
 		}
-		out[i] += formant.step(filter.step(in, 1.0, nil))
+		out[i] += formant.step(filter.step(in, 1.0, 1.0, 1.0))
 	}
 	fft.CalcAbs(out)
 	return out[:fftSize/2]
