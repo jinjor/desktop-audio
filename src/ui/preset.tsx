@@ -3,26 +3,113 @@ import { Action } from "./state";
 import * as d from "./decoder";
 import { Select } from "./select";
 import { ScheduleFn } from "./react-util";
+import { Dialog } from "./modal";
 
 export const presetMetaDecoder = d.object({
   name: d.string(),
 });
 export type PresetMeta = d.TypeOf<typeof presetMetaDecoder>;
-
+export type PresetState = {
+  list: PresetMeta[];
+  name: string;
+  saver: { name: string } | null;
+  remover: { name: string } | null;
+};
+export type PresetAction =
+  | { type: "selectPreset"; value: string }
+  | { type: "openSaver"; value: string }
+  | { type: "inputName"; value: string }
+  | { type: "save" }
+  | { type: "closeSaver" }
+  | { type: "openRemover"; value: string }
+  | { type: "remove" }
+  | { type: "closeRemover" };
+export const presetReducer = (
+  state: PresetState,
+  action: PresetAction,
+  effect: ScheduleFn<Action>
+): PresetState => {
+  switch (action.type) {
+    case "selectPreset":
+      effect((schedule) =>
+        schedule({ type: "loadPreset", value: action.value })
+      );
+      return { ...state, name: action.value };
+    case "inputName":
+      return { ...state, saver: { ...state.saver, name: action.value } };
+    case "openSaver":
+      return {
+        ...state,
+        saver: { ...state.saver, name: action.value },
+      };
+    case "save":
+      effect((schedule) =>
+        schedule({ type: "savePreset", value: state.saver!.name })
+      );
+      return {
+        ...state,
+        name: state.saver!.name,
+        saver: null,
+      };
+    case "closeSaver":
+      return { ...state, saver: null };
+    case "openRemover":
+      return {
+        ...state,
+        remover: { ...state.remover, name: action.value },
+      };
+    case "remove":
+      effect((schedule) =>
+        schedule({ type: "removePreset", value: state.remover!.name })
+      );
+      return {
+        ...state,
+        name: "",
+        remover: null,
+      };
+    case "closeRemover":
+      return { ...state, remover: null };
+  }
+};
+export const initialPresetState: PresetState = {
+  list: [],
+  name: "",
+  saver: null,
+  remover: null,
+};
+export const setPresetList = (
+  state: PresetState,
+  list: PresetMeta[]
+): PresetState => {
+  return { ...state, list };
+};
 export const Presets = React.memo(
-  (o: {
-    list: PresetMeta[];
-    dispatch: React.Dispatch<Action>;
-    name: string | null;
-  }) => {
+  (o: { state: PresetState; dispatch: React.Dispatch<PresetAction> }) => {
     const onChangePreset = (value: string) =>
-      o.dispatch({ type: "changedPreset", value });
+      o.dispatch({ type: "selectPreset", value });
     return (
-      <PresetSelect
-        list={o.list}
-        onChange={onChangePreset}
-        value={o.name ?? ""}
-      />
+      <div>
+        <PresetSelect
+          list={o.state.list}
+          onChange={onChangePreset}
+          value={o.state.name ?? ""}
+        />
+        <button
+          onClick={() => o.dispatch({ type: "openSaver", value: o.state.name })}
+        >
+          Save
+        </button>
+        <button
+          disabled={!o.state.name}
+          onClick={() =>
+            o.dispatch({ type: "openRemover", value: o.state.name })
+          }
+        >
+          Remove
+        </button>
+        <PresetSaver state={o.state.saver} dispatch={o.dispatch} />
+        <PresetRemover state={o.state.remover} dispatch={o.dispatch} />
+      </div>
     );
   }
 );
@@ -37,70 +124,64 @@ const PresetSelect = React.memo(
     return <Select list={list} value={o.value} onChange={o.onChange} />;
   }
 );
-
-export type PresetSaverAction =
-  | { type: "inputName"; value: string }
-  | { type: "save" }
-  | { type: "close" };
-export const presetSaverReducer = (
-  state: PresetSaverState,
-  action: PresetSaverAction,
-  schedule: ScheduleFn<Action>
-): PresetSaverState => {
-  switch (action.type) {
-    case "inputName":
-      return { ...state, name: action.value };
-    case "save":
-      schedule((dispatch) =>
-        dispatch({ type: "savePreset", value: state.name })
-      );
-      return { ...state, open: false };
-    case "close":
-      return { ...state, open: false };
-  }
-};
-export type PresetSaverState = {
-  open: boolean;
-  name: string;
-};
-export const initialPresetSaverState: PresetSaverState = {
-  open: false,
-  name: "",
-};
-export const openPresetSaver = (name: string): PresetSaverState => ({
-  open: true,
-  name,
-});
-export const PresetSaver = React.memo(
+const PresetSaver = React.memo(
   (o: {
-    state: PresetSaverState;
-    dispatch: React.Dispatch<PresetSaverAction>;
+    state: { name: string } | null;
+    dispatch: React.Dispatch<PresetAction>;
   }) => {
     const onChangeName = (e: React.ChangeEvent<HTMLInputElement>) => {
       o.dispatch({ type: "inputName", value: e.target.value });
     };
-    const onClickOK = () => {
+    const onClose = () => {
+      o.dispatch({ type: "closeSaver" });
+    };
+    const onOK = () => {
       o.dispatch({ type: "save" });
     };
-    const onClickCancel = () => {
-      o.dispatch({ type: "close" });
+    const onCancel = () => {
+      o.dispatch({ type: "closeSaver" });
     };
-    const onClickClose = () => {
-      o.dispatch({ type: "close" });
-    };
-    if (!o.state.open) {
+    if (o.state == null) {
       return null;
     }
     return (
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}>
-        <div>
+      <Dialog
+        title="Save"
+        onClose={onClose}
+        onCancel={onCancel}
+        onOK={onOK}
+        okDisabled={o.state.name.trim() === ""}
+      >
+        <label>
+          Name:
           <input onChange={onChangeName} value={o.state.name} />
-          <button onClick={onClickOK}>OK</button>
-          <button onClick={onClickCancel}>Cancel</button>
-          <button onClick={onClickClose}>X</button>
-        </div>
-        <div style={{ backgroundColor: "rgba(0,0,0,0.5)" }}></div>
-      </div>
+        </label>
+      </Dialog>
+    );
+  }
+);
+
+const PresetRemover = React.memo(
+  (o: {
+    state: { name: string } | null;
+    dispatch: React.Dispatch<PresetAction>;
+  }) => {
+    const onClose = () => {
+      o.dispatch({ type: "closeRemover" });
+    };
+    const onOK = () => {
+      o.dispatch({ type: "remove" });
+    };
+    const onCancel = () => {
+      o.dispatch({ type: "closeRemover" });
+    };
+    if (o.state == null) {
+      return null;
+    }
+    return (
+      <Dialog title="Remove" onClose={onClose} onCancel={onCancel} onOK={onOK}>
+        <label>Remove {o.state.name}?</label>
+      </Dialog>
     );
   }
 );

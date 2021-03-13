@@ -9,13 +9,12 @@ import { filterDecoder } from "./filter";
 import { formantDecoder } from "./formant";
 import { echoDecoder } from "./echo";
 import {
-  initialPresetSaverState,
-  openPresetSaver,
-  PresetMeta,
   presetMetaDecoder,
-  PresetSaverAction,
-  presetSaverReducer,
-  PresetSaverState,
+  PresetAction,
+  presetReducer,
+  PresetState,
+  initialPresetState,
+  setPresetList,
 } from "./preset";
 import { ReducerWithEffect, ScheduleFn } from "./react-util";
 
@@ -46,15 +45,13 @@ const presetListDecoder = d.object({
 type Params = d.TypeOf<typeof paramsDecoder>;
 type Status = d.TypeOf<typeof statusDecoder>;
 export type State = {
-  presets: PresetMeta[];
-  presetSaver: PresetSaverState;
+  preset: PresetState;
   name: string | null;
   params: Params;
   status: Status;
 };
 export const initialState: State = {
-  presets: [],
-  presetSaver: initialPresetSaverState,
+  preset: initialPresetState,
   name: null,
   params: {
     poly: "mono",
@@ -124,10 +121,10 @@ export const initialState: State = {
 export type Action =
   | { type: "receivedCommand"; command: string[] }
   | { type: "paramsAction"; value: ParamsAction }
-  | { type: "changedPreset"; value: string }
-  | { type: "openPresetSaver" }
-  | { type: "presetSaverAction"; value: PresetSaverAction }
-  | { type: "savePreset"; value: string };
+  | { type: "presetAction"; value: PresetAction }
+  | { type: "loadPreset"; value: string }
+  | { type: "savePreset"; value: string }
+  | { type: "removePreset"; value: string };
 export type ParamsAction =
   | { type: "changedPoly"; value: string }
   | { type: "changedGlideTime"; value: number }
@@ -189,7 +186,7 @@ export const reducer: ReducerWithEffect<State, Action> = (
         const obj = JSON.parse(command[1]);
         console.log(obj);
         const { items } = presetListDecoder.run(obj);
-        return { ...state, presets: items };
+        return { ...state, preset: setPresetList(state.preset, items) };
       }
       if (command[0] === "all_params") {
         const obj = JSON.parse(command[1]);
@@ -208,26 +205,25 @@ export const reducer: ReducerWithEffect<State, Action> = (
       const { value } = action;
       return { ...state, params: paramsReducer(state.params, value) };
     }
-    case "changedPreset": {
+    case "presetAction": {
+      console.log(action);
+      const { value } = action;
+      const preset = presetReducer(state.preset, value, schedule);
+      return { ...state, preset };
+    }
+    case "loadPreset": {
       const { value } = action;
       ipcRenderer.send("audio", ["preset", "load", value]);
-      return { ...state, name: value };
-    }
-    case "openPresetSaver": {
-      return { ...state, presetSaver: openPresetSaver(state.name ?? "") };
-    }
-    case "presetSaverAction": {
-      const { value } = action;
-      const presetSaver = presetSaverReducer(
-        state.presetSaver,
-        value,
-        schedule
-      );
-      return { ...state, presetSaver };
+      return state;
     }
     case "savePreset": {
       const { value } = action;
       ipcRenderer.send("audio", ["preset", "save_as", value]);
+      return state;
+    }
+    case "removePreset": {
+      const { value } = action;
+      ipcRenderer.send("audio", ["preset", "remove", value]);
       return state;
     }
   }

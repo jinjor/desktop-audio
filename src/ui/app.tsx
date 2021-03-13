@@ -12,7 +12,7 @@ import { EnvelopeGroup } from "./envelope";
 import { EchoGroup } from "./echo";
 import { ModeGroup } from "./mode";
 import { FormantGroup } from "./formant";
-import { Presets, PresetSaver, PresetSaverAction } from "./preset";
+import { PresetAction, Presets } from "./preset";
 import { useReducerWithEffect } from "./react-util";
 
 const Canvas = (props: {
@@ -130,10 +130,10 @@ const App = () => {
     },
     []
   );
-  const dispatchPresetSaver: React.Dispatch<PresetSaverAction> = useCallback(
-    (action: PresetSaverAction) => {
+  const dispatchPreset: React.Dispatch<PresetAction> = useCallback(
+    (action: PresetAction) => {
       dispatch({
-        type: "presetSaverAction",
+        type: "presetAction",
         value: action,
       });
     },
@@ -144,11 +144,7 @@ const App = () => {
   return (
     <React.Fragment>
       <div>
-        <Presets list={state.presets} name={state.name} dispatch={dispatch} />
-        <button onClick={() => dispatch({ type: "openPresetSaver" })}>
-          Save
-        </button>
-        <PresetSaver state={state.presetSaver} dispatch={dispatchPresetSaver} />
+        <Presets state={state.preset} dispatch={dispatchPreset} />
       </div>
       <div style={{ display: "flex", gap: "20px", padding: "5px 10px" }}>
         <ModeGroup
