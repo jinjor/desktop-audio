@@ -88,6 +88,11 @@ for (let i = 0; i < 3; i++) {
     maxDelay: 1000,
     defaultDelay: 200,
   });
+  envelopeDestinations.set(`lfo${i}_amount_0v`, {
+    minDelay: 0,
+    maxDelay: 1000,
+    defaultDelay: 0,
+  });
 }
 for (let i = 0; i < 3; i++) {
   envelopeDestinations.set(`lfo${i}_freq`, {

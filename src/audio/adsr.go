@@ -127,9 +127,9 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 		p.destination == destNoteFilterGain0V ||
 		p.destination == destFilterQ0V ||
 		p.destination == destFilterGain0V ||
-		p.destination == destLfo0Amount ||
-		p.destination == destLfo1Amount ||
-		p.destination == destLfo2Amount {
+		p.destination == destLfo0Amount0V ||
+		p.destination == destLfo1Amount0V ||
+		p.destination == destLfo2Amount0V {
 		// zero-to-value
 		a.base = 1
 		a.peek = 0
@@ -146,7 +146,10 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 		p.destination == destOsc1Volume ||
 		p.destination == destNoteFilterQ ||
 		p.destination == destFilterQ ||
-		p.destination == destFilterGain {
+		p.destination == destFilterGain ||
+		p.destination == destLfo0Amount ||
+		p.destination == destLfo1Amount ||
+		p.destination == destLfo2Amount {
 		// value-to-zero
 		a.base = 0
 		a.peek = 1

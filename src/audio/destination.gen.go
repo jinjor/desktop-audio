@@ -26,8 +26,11 @@ const (
 	destLfo1Freq
 	destLfo2Freq
 	destLfo0Amount
+	destLfo0Amount0V
 	destLfo1Amount
+	destLfo1Amount0V
 	destLfo2Amount
+	destLfo2Amount0V
 )
 
 func destinationFromString(s string) int {
@@ -78,10 +81,16 @@ func destinationFromString(s string) int {
 		return destLfo2Freq
 	case "lfo0_amount":
 		return destLfo0Amount
+	case "lfo0_amount_0v":
+		return destLfo0Amount0V
 	case "lfo1_amount":
 		return destLfo1Amount
+	case "lfo1_amount_0v":
+		return destLfo1Amount0V
 	case "lfo2_amount":
 		return destLfo2Amount
+	case "lfo2_amount_0v":
+		return destLfo2Amount0V
 	}
 	return destNone
 }
@@ -133,10 +142,16 @@ func destinationToString(d int) string {
 		return "lfo2_freq"
 	case destLfo0Amount:
 		return "lfo0_amount"
+	case destLfo0Amount0V:
+		return "lfo0_amount_0v"
 	case destLfo1Amount:
 		return "lfo1_amount"
+	case destLfo1Amount0V:
+		return "lfo1_amount_0v"
 	case destLfo2Amount:
 		return "lfo2_amount"
+	case destLfo2Amount0V:
+		return "lfo2_amount_0v"
 	}
 	return "none"
 }

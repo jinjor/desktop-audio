@@ -103,10 +103,9 @@ func (o *decoratedOsc) step(event int) float64 {
 			if !envelope.enabled {
 				continue
 			}
-			if envelope.destination == destLfoAmount[lfoIndex] {
+			if envelope.destination == destLfoAmount[lfoIndex] || envelope.destination == destLfoAmount0V[lfoIndex] {
 				amountGain *= envelope.getValue()
-			}
-			if envelope.destination == destLfoFreq[lfoIndex] {
+			} else if envelope.destination == destLfoFreq[lfoIndex] {
 				lfoFreqRatio *= math.Pow(16.0, envelope.getValue())
 			}
 		}
