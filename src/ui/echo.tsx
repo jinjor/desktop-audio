@@ -48,7 +48,7 @@ const EchoDelay = React.memo(
       o.dispatch({ type: "changedEchoDelay", value });
     return (
       <LabeledKnob
-        min={10}
+        min={0}
         max={800}
         steps={800}
         exponential={true}

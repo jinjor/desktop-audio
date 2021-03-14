@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { panic } from "./debug";
 
 const Tooptip = (o: {
   text: string;
@@ -75,6 +74,7 @@ export const Knob = (o: KnobOptions) => {
   };
   return (
     <KnobHandler
+      title={o.value.toFixed(1)}
       value={v}
       steps={o.steps}
       onInput={onInput}
