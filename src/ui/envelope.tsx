@@ -7,104 +7,33 @@ import * as d from "./decoder";
 import { checkRenderingExclusive } from "./debug";
 
 type EnvelopeDestination = {
-  minDelay: number;
-  maxDelay: number;
-  defaultDelay: number;
+  name: string;
+  label: string;
 };
-const envelopeDestinations = new Map<string, EnvelopeDestination>();
-envelopeDestinations.set("none", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("osc0_volume", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("osc1_volume", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("freq", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("note_filter_freq", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("note_filter_q", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("note_filter_q_0v", {
-  minDelay: 0,
-  maxDelay: 1000,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("note_filter_gain", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("note_filter_gain_0v", {
-  minDelay: 0,
-  maxDelay: 1000,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("filter_freq", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("filter_q", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("filter_q_0v", {
-  minDelay: 0,
-  maxDelay: 1000,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("filter_gain", {
-  minDelay: 0,
-  maxDelay: 0,
-  defaultDelay: 0,
-});
-envelopeDestinations.set("filter_gain_0v", {
-  minDelay: 0,
-  maxDelay: 1000,
-  defaultDelay: 0,
-});
-for (let i = 0; i < 3; i++) {
-  envelopeDestinations.set(`lfo${i}_amount`, {
-    minDelay: 0,
-    maxDelay: 1000,
-    defaultDelay: 200,
-  });
-  envelopeDestinations.set(`lfo${i}_amount_0v`, {
-    minDelay: 0,
-    maxDelay: 1000,
-    defaultDelay: 0,
-  });
-}
-for (let i = 0; i < 3; i++) {
-  envelopeDestinations.set(`lfo${i}_freq`, {
-    minDelay: 0,
-    maxDelay: 0,
-    defaultDelay: 0,
-  });
-}
-
+const envelopeDestinations: EnvelopeDestination[] = [
+  { name: "none", label: "None" },
+  { name: "osc0_volume", label: "OSC 1 Volume" },
+  { name: "osc1_volume", label: "OSC 2 Volume" },
+  { name: "freq", label: "Freq" },
+  { name: "note_filter_freq", label: "Note-Filter Freq" },
+  { name: "note_filter_q", label: "Note-Filter Q" },
+  { name: "note_filter_gain", label: "Note-Filter Gain" },
+  { name: "filter_freq", label: "Filter Freq" },
+  { name: "filter_q", label: "Filter Q" },
+  { name: "filter_gain", label: "Filter Gain" },
+  { name: "lfo0_amount", label: "LFO 1 Amount" },
+  { name: "lfo1_amount", label: "LFO 2 Amount" },
+  { name: "lfo2_amount", label: "LFO 3 Amount" },
+  { name: "lfo0_freq", label: "LFO 1 Freq" },
+  { name: "lfo1_freq", label: "LFO 2 Freq" },
+  { name: "lfo2_freq", label: "LFO 3 Freq" },
+];
+const theirList = envelopeDestinations.map((e) => e.name);
+const ourList = envelopeDestinations.map((e) => e.label);
 export const envelopeDecoder = d.object({
   enabled: d.boolean,
   destination: d.string(),
+  kind: d.string(),
   delay: d.number(),
   attack: d.number(),
   amount: d.number(),
@@ -114,6 +43,7 @@ type Envelope = d.TypeOf<typeof envelopeDecoder>;
 export const defaultEnvelope: Envelope = {
   enabled: false,
   destination: "none",
+  kind: "coming",
   delay: 0,
   attack: 0,
   amount: 0,
@@ -125,8 +55,6 @@ export const EnvelopeGroup = React.memo(
     dispatch: React.Dispatch<ParamsAction>;
   }) => {
     checkRenderingExclusive("params", "envelope");
-    const list = [...envelopeDestinations.keys()];
-    const destination = envelopeDestinations.get(o.value.destination)!;
     const onChangeEnabled = useCallbackWithIndex(
       o.index,
       (index: number, value: boolean) =>
@@ -134,8 +62,18 @@ export const EnvelopeGroup = React.memo(
     );
     const onChangeDestination = useCallbackWithIndex(
       o.index,
+      (index: number, value: string) => {
+        o.dispatch({
+          type: "changedEnvelopeDestination",
+          index,
+          value: theirList[ourList.indexOf(value)],
+        });
+      }
+    );
+    const onChangeKind = useCallbackWithIndex(
+      o.index,
       (index: number, value: string) =>
-        o.dispatch({ type: "changedEnvelopeDestination", index, value })
+        o.dispatch({ type: "changedEnvelopeKind", index, value })
     );
     const onChangeDelay = useCallbackWithIndex(
       o.index,
@@ -161,16 +99,16 @@ export const EnvelopeGroup = React.memo(
       >
         <div style={{ display: "flex", flexFlow: "column", gap: "6px" }}>
           <Select
-            list={list}
-            value={o.value.destination}
+            list={ourList}
+            value={ourList[theirList.indexOf(o.value.destination)]}
             onChange={onChangeDestination}
           />
-          <EnvelopeDelay
-            min={destination.minDelay}
-            max={destination.maxDelay}
-            value={o.value.delay}
-            onChange={onChangeDelay}
+          <Select
+            list={["coming", "going"]}
+            value={o.value.kind}
+            onChange={onChangeKind}
           />
+          <EnvelopeDelay value={o.value.delay} onChange={onChangeDelay} />
           <EnvelopeAttack value={o.value.attack} onChange={onChangeAttack} />
           <EnvelopeAmount value={o.value.amount} onChange={onChangeAmount} />
         </div>
@@ -179,18 +117,13 @@ export const EnvelopeGroup = React.memo(
   }
 );
 const EnvelopeDelay = React.memo(
-  (o: {
-    min: number;
-    max: number;
-    value: number;
-    onChange: (value: number) => void;
-  }) => {
+  (o: { value: number; onChange: (value: number) => void }) => {
     return (
       <LabeledKnob
-        min={o.min}
-        max={o.max}
+        min={0}
+        max={1000}
         steps={400}
-        exponential={false}
+        exponential={true}
         value={o.value}
         onChange={o.onChange}
         label="Delay"
@@ -205,7 +138,7 @@ const EnvelopeAttack = React.memo(
         min={0}
         max={1000}
         steps={400}
-        exponential={false}
+        exponential={true}
         value={o.value}
         onChange={o.onChange}
         label="Attack"
@@ -217,13 +150,14 @@ const EnvelopeAmount = React.memo(
   (o: { value: number; onChange: (value: number) => void }) => {
     return (
       <LabeledKnob
-        min={-1}
-        max={1}
+        min={-4}
+        max={4}
+        from={0}
         steps={400}
         exponential={false}
         value={o.value}
         onChange={o.onChange}
-        label="Amount"
+        label="Freq Octave"
       />
     );
   }

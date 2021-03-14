@@ -4,6 +4,8 @@ import (
 	"math"
 )
 
+// ----- Decorated OSC -----
+
 type decoratedOsc struct {
 	oscs       []*osc
 	adsr       *adsr
@@ -12,6 +14,7 @@ type decoratedOsc struct {
 	formant    *formant
 	lfos       []*lfo
 	envelopes  []*envelope
+	modulation *modulation
 }
 
 func newDecoratedOsc() *decoratedOsc {
@@ -23,6 +26,7 @@ func newDecoratedOsc() *decoratedOsc {
 		formant:    newFormant(),
 		lfos:       []*lfo{newLfo(), newLfo(), newLfo()},
 		envelopes:  []*envelope{newEnvelope(), newEnvelope(), newEnvelope()},
+		modulation: newModulation(),
 	}
 }
 
@@ -61,9 +65,10 @@ func (o *decoratedOsc) applyParams(
 	for i, envelope := range o.envelopes {
 		envelope.enabled = envelopeParams[i].enabled
 		envelope.destination = envelopeParams[i].destination
-		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
+		envelope.applyParams(envelopeParams[i])
 	}
 }
+
 func (o *decoratedOsc) step(event int) float64 {
 	switch event {
 	case enumNoEvent:
@@ -79,90 +84,33 @@ func (o *decoratedOsc) step(event int) float64 {
 		}
 	}
 	o.adsr.step()
+	m := o.modulation
+	m.init()
 	for _, envelope := range o.envelopes {
-		if !envelope.enabled {
-			continue
-		}
-		envelope.step()
+		envelope.step(m)
 	}
-	osc0VolumeRatio := 1.0
-	osc1VolumeRatio := 1.0
-	freqRatio := 1.0
-	phaseShift := 0.0
-	ampRatio := 1.0
-	noteFilterFreqRatio := 1.0
-	noteFilterQExponent := 1.0
-	noteFilterGainRatio := 1.0
-	filterFreqRatio := 1.0
-	filterQExponent := 1.0
-	filterGainRatio := 1.0
 	for lfoIndex, lfo := range o.lfos {
-		amountGain := 1.0
-		lfoFreqRatio := 1.0
-		for _, envelope := range o.envelopes {
-			if !envelope.enabled {
-				continue
-			}
-			if envelope.destination == destLfoAmount[lfoIndex] || envelope.destination == destLfoAmount0V[lfoIndex] {
-				amountGain *= envelope.getValue()
-			} else if envelope.destination == destLfoFreq[lfoIndex] {
-				lfoFreqRatio *= math.Pow(16.0, envelope.getValue())
-			}
-		}
-		_freqRatio, _phaseShift, _ampRatio, _noteFilterFreqRatio, _filterFreqRatio := lfo.step(o.oscs[0], amountGain, lfoFreqRatio) // TODO
-		freqRatio *= _freqRatio
-		phaseShift += _phaseShift
-		ampRatio *= _ampRatio
-		noteFilterFreqRatio *= _noteFilterFreqRatio
-		filterFreqRatio *= _filterFreqRatio
-	}
-	for _, envelope := range o.envelopes {
-		if !envelope.enabled {
-			continue
-		}
-		if envelope.destination == destOsc0Volume {
-			osc0VolumeRatio *= envelope.getValue()
-		} else if envelope.destination == destOsc1Volume {
-			osc1VolumeRatio *= envelope.getValue()
-		} else if envelope.destination == destFreq {
-			freqRatio *= math.Pow(16.0, envelope.getValue())
-		} else if envelope.destination == destNoteFilterFreq {
-			noteFilterFreqRatio *= math.Pow(16.0, envelope.getValue())
-		} else if envelope.destination == destNoteFilterQ || envelope.destination == destNoteFilterQ0V {
-			noteFilterQExponent *= envelope.getValue()
-		} else if envelope.destination == destNoteFilterGain || envelope.destination == destNoteFilterGain0V {
-			noteFilterGainRatio *= envelope.getValue()
-		} else if envelope.destination == destFilterFreq {
-			filterFreqRatio *= math.Pow(16.0, envelope.getValue())
-		} else if envelope.destination == destFilterQ || envelope.destination == destFilterQ0V {
-			filterQExponent *= envelope.getValue()
-		} else if envelope.destination == destFilterGain || envelope.destination == destFilterGain0V {
-			filterGainRatio *= envelope.getValue()
-		}
+		lfo.step(o.oscs[0], m.lfoAmountGain[lfoIndex], m.lfoFreqRatio[lfoIndex], m)
 	}
 	value := 0.0
 	for i, osc := range o.oscs {
-		v := osc.step(freqRatio, phaseShift) * oscGain * ampRatio * o.adsr.getValue()
-		if i == 0 {
-			v *= osc0VolumeRatio
-		} else if i == 1 {
-			v *= osc1VolumeRatio
-		}
+		v := osc.step(m.freqRatio, m.phaseShift) * oscGain * m.ampRatio * o.adsr.getValue()
+		v *= m.oscVolumeRatio[i]
 		if i == 0 && o.noteFilter.targetOsc == targetOsc0 ||
 			i == 1 && o.noteFilter.targetOsc == targetOsc1 {
-			v = o.noteFilter.step(v, noteFilterFreqRatio, noteFilterQExponent, noteFilterGainRatio, o.oscs[0].freq.value*freqRatio) // TODO: use original freq of note
+			v = o.noteFilter.step(v, m.noteFilterFreqRatio, m.noteFilterQExponent, m.noteFilterGainRatio, o.oscs[0].freq.value*m.freqRatio) // TODO: use original freq of note
 		}
 		if i == 0 && o.filter.targetOsc == targetOsc0 ||
 			i == 1 && o.filter.targetOsc == targetOsc1 {
-			v = o.filter.step(v, filterFreqRatio, filterQExponent, filterGainRatio)
+			v = o.filter.step(v, m.filterFreqRatio, m.filterQExponent, m.filterGainRatio)
 		}
 		value += v
 	}
 	if o.noteFilter.targetOsc == targetOscAll {
-		value = o.noteFilter.step(value, filterFreqRatio, noteFilterQExponent, noteFilterGainRatio, o.oscs[0].freq.value*freqRatio) // TODO: use original freq of note
+		value = o.noteFilter.step(value, m.filterFreqRatio, m.noteFilterQExponent, m.noteFilterGainRatio, o.oscs[0].freq.value*m.freqRatio) // TODO: use original freq of note
 	}
 	if o.filter.targetOsc == targetOscAll {
-		value = o.filter.step(value, filterFreqRatio, filterQExponent, filterGainRatio)
+		value = o.filter.step(value, m.filterFreqRatio, m.filterQExponent, m.filterGainRatio)
 	}
 	value = o.formant.step(value)
 	if math.IsNaN(value) {

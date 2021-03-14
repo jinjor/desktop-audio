@@ -147,6 +147,7 @@ export type ParamsAction =
   | { type: "changedLFOAmount"; index: number; value: number }
   | { type: "changedEnvelopeEnabled"; index: number; value: boolean }
   | { type: "changedEnvelopeDestination"; index: number; value: string }
+  | { type: "changedEnvelopeKind"; index: number; value: string }
   | { type: "changedEnvelopeDelay"; index: number; value: number }
   | { type: "changedEnvelopeAttack"; index: number; value: number }
   | { type: "changedEnvelopeAmount"; index: number; value: number }
@@ -410,6 +411,22 @@ const paramsReducer = (state: Params, action: ParamsAction): Params => {
         ...state,
         envelopes: setItem(state.envelopes, index, {
           destination: value,
+        }),
+      };
+    }
+    case "changedEnvelopeKind": {
+      const { index, value } = action;
+      ipcRenderer.send("audio", [
+        "set",
+        "envelope",
+        String(index),
+        "kind",
+        value,
+      ]);
+      return {
+        ...state,
+        envelopes: setItem(state.envelopes, index, {
+          kind: value,
         }),
       };
     }

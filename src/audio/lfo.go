@@ -132,37 +132,31 @@ func (l *lfo) applyParams(p *lfoParams) {
 	l.amount = p.amount
 }
 
-func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64) (float64, float64, float64, float64, float64) {
-	freqRatio := 1.0
-	phaseShift := 0.0
-	ampRatio := 1.0
-	noteFilterFreqRatio := 1.0
-	filterFreqRatio := 1.0
+func (l *lfo) step(career *osc, amountGain float64, lfoFreqRatio float64, m *modulation) {
 	if !l.enabled {
-		return freqRatio, phaseShift, ampRatio, noteFilterFreqRatio, filterFreqRatio
+		return
 	}
 	switch l.destination {
 	case destVibrato:
 		amount := l.amount * amountGain
-		freqRatio = math.Pow(2.0, l.osc.step(lfoFreqRatio, 0.0)*amount/100.0/12.0)
+		m.freqRatio *= math.Pow(2.0, l.osc.step(lfoFreqRatio, 0.0)*amount/100.0/12.0)
 	case destTremolo:
 		amount := l.amount * amountGain
-		ampRatio = 1.0 + (l.osc.step(lfoFreqRatio, 0.0)-1.0)/2.0*amount
+		m.ampRatio *= 1.0 + (l.osc.step(lfoFreqRatio, 0.0)-1.0)/2.0*amount
 	case destFM:
 		amount := l.amount * amountGain
-		freqRatio = math.Pow(2.0, l.osc.step(career.freq.value*lfoFreqRatio, 0.0)*amount/100/12)
+		m.freqRatio *= math.Pow(2.0, l.osc.step(career.freq.value*lfoFreqRatio, 0.0)*amount/100/12)
 	case destPM:
 		amount := l.amount * amountGain
-		phaseShift = l.osc.step(career.freq.value*lfoFreqRatio, 0.0) * amount
+		m.phaseShift += l.osc.step(career.freq.value*lfoFreqRatio, 0.0) * amount
 	case destAM:
 		amount := l.amount * amountGain
-		ampRatio = 1.0 + l.osc.step(career.freq.value*lfoFreqRatio, 0.0)*amount
+		m.ampRatio *= 1.0 + l.osc.step(career.freq.value*lfoFreqRatio, 0.0)*amount
 	case destNoteFilterFreq:
 		amount := l.amount * amountGain
-		noteFilterFreqRatio = math.Pow(16.0, l.osc.step(lfoFreqRatio, 0.0)*amount)
+		m.noteFilterFreqRatio *= math.Pow(16.0, l.osc.step(lfoFreqRatio, 0.0)*amount)
 	case destFilterFreq:
 		amount := l.amount * amountGain
-		filterFreqRatio = math.Pow(16.0, l.osc.step(lfoFreqRatio, 0.0)*amount)
+		m.filterFreqRatio *= math.Pow(16.0, l.osc.step(lfoFreqRatio, 0.0)*amount)
 	}
-	return freqRatio, phaseShift, ampRatio, noteFilterFreqRatio, filterFreqRatio
 }

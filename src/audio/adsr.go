@@ -93,16 +93,15 @@ func (a *adsrParams) set(key string, value string) error {
     |a    |h  |d |      |r |
 */
 type adsr struct {
-	attack    float64 // ms
-	hold      float64 // ms
-	decay     float64 // ms
-	sustain   float64 // 0-1
-	release   float64 // ms
-	base      float64 // 0-1
-	peek      float64 // 0-1
-	noRelease bool
-	phase     int // "none", "attack", "hold", "decay", "sustain", "release"
-	tvalue    *transitiveValue
+	attack  float64 // ms
+	hold    float64 // ms
+	decay   float64 // ms
+	sustain float64 // 0-1
+	release float64 // ms
+	base    float64 // 0-1
+	peak    float64 // 0-1
+	phase   int     // "none", "attack", "hold", "decay", "sustain", "release"
+	tvalue  *transitiveValue
 }
 
 func (a *adsr) getValue() float64 {
@@ -110,7 +109,7 @@ func (a *adsr) getValue() float64 {
 }
 func (a *adsr) setParams(p *adsrParams) {
 	a.base = 0
-	a.peek = 1
+	a.peak = 1
 	a.attack = p.attack
 	a.hold = 0
 	a.decay = p.decay
@@ -120,71 +119,20 @@ func (a *adsr) setParams(p *adsrParams) {
 		a.tvalue = &transitiveValue{}
 	}
 }
-func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
-	if p.destination == destVibrato ||
-		p.destination == destTremolo ||
-		p.destination == destNoteFilterQ0V ||
-		p.destination == destNoteFilterGain0V ||
-		p.destination == destFilterQ0V ||
-		p.destination == destFilterGain0V ||
-		p.destination == destLfo0Amount0V ||
-		p.destination == destLfo1Amount0V ||
-		p.destination == destLfo2Amount0V {
-		// zero-to-value
-		a.base = 1
-		a.peek = 0
-	} else if p.destination == destFreq ||
-		p.destination == destNoteFilterFreq ||
-		p.destination == destFilterFreq ||
-		p.destination == destLfo0Freq ||
-		p.destination == destLfo1Freq ||
-		p.destination == destLfo2Freq {
-		// amount-to-value
-		a.base = 0
-		a.peek = p.amount
-	} else if p.destination == destOsc0Volume ||
-		p.destination == destOsc1Volume ||
-		p.destination == destNoteFilterQ ||
-		p.destination == destFilterQ ||
-		p.destination == destFilterGain ||
-		p.destination == destLfo0Amount ||
-		p.destination == destLfo1Amount ||
-		p.destination == destLfo2Amount {
-		// value-to-zero
-		a.base = 0
-		a.peek = 1
-	}
-	a.attack = 0
-	a.hold = p.delay
-	a.decay = p.attack
-	a.sustain = a.base
-	a.release = 0
-	a.noRelease = true
-	if a.tvalue == nil {
-		a.tvalue = &transitiveValue{}
-	}
-	a.tvalue.value = a.base
-}
-
 func (a *adsr) noteOn() {
 	a.phase = phaseAttack
-	a.tvalue.linear(a.attack, a.peek)
+	a.tvalue.linear(a.attack, a.peak)
 }
-
 func (a *adsr) noteOff() {
-	if a.noRelease {
-		return
-	}
 	a.phase = phaseRelease
 	a.tvalue.exponential(a.release, a.base, 0.001)
 }
-
 func (a *adsr) step() {
 	switch a.phase {
 	case phaseAttack:
 		if a.tvalue.step() {
 			a.phase = phaseHold
-			a.tvalue.linear(a.hold, a.peek)
+			a.tvalue.linear(a.hold, a.peak)
 		}
 	case phaseHold:
 		if a.tvalue.step() {
