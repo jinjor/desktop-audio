@@ -63,8 +63,6 @@ func (o *decoratedOsc) applyParams(
 		lfo.applyParams(lfoParams[i])
 	}
 	for i, envelope := range o.envelopes {
-		envelope.enabled = envelopeParams[i].enabled
-		envelope.destination = envelopeParams[i].destination
 		envelope.applyParams(envelopeParams[i])
 	}
 }

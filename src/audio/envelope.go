@@ -141,6 +141,7 @@ func newEnvelope() *envelope {
 	}
 }
 func (e *envelope) applyParams(p *envelopeParams) {
+	e.enabled = p.enabled
 	e.destination = p.destination
 	e.kind = p.kind
 	e.amount = p.amount
