@@ -6,11 +6,44 @@ import (
 	"strconv"
 )
 
+// ----- Envelope Kind ----- //
+
+//go:generate go run ../gen/main.go -- envelopeKind.gen.go
+/*
+generate-enum envelopeKind
+
+envelopeKindComing coming
+envelopeKindGoing going
+
+EOF
+
+  [coming]
+        ? +______
+	        |      \_
+          |        \_
+          |          \_
+  setting + - - - - - -`----
+	        |
+		      +-----+------+----
+          |delay|attack|
+
+  [going]
+        ? +           ,-----
+	        |         _/
+          |       _/
+          |     _/
+  setting +----- - - - - - -
+		      |
+          +-----+------+----
+          |delay|attack|
+*/
+
 // ----- Envelope ----- //
 
 type envelopeParams struct {
 	enabled     bool
 	destination int
+	kind        int
 	delay       float64
 	attack      float64
 	amount      float64
@@ -19,6 +52,7 @@ type envelopeParams struct {
 type envelopeJSON struct {
 	Enabled     bool    `json:"enabled"`
 	Destination string  `json:"destination"`
+	Kind        string  `json:"kind"`
 	Delay       float64 `json:"delay"`
 	Attack      float64 `json:"attack"`
 	Amount      float64 `json:"amount"`
@@ -33,6 +67,7 @@ func (l *envelopeParams) applyJSON(data json.RawMessage) {
 	}
 	l.enabled = j.Enabled
 	l.destination = destinationFromString(j.Destination)
+	l.kind = envelopeKindFromString(j.Kind)
 	l.delay = j.Delay
 	l.attack = j.Attack
 	l.amount = j.Amount
@@ -41,6 +76,7 @@ func (l *envelopeParams) toJSON() json.RawMessage {
 	return toRawMessage(&envelopeJSON{
 		Enabled:     l.enabled,
 		Destination: destinationToString(l.destination),
+		Kind:        envelopeKindToString(l.kind),
 		Delay:       l.delay,
 		Attack:      l.attack,
 		Amount:      l.amount,
@@ -50,6 +86,7 @@ func newEnvelopeParams() *envelopeParams {
 	return &envelopeParams{
 		enabled:     false,
 		destination: destNone,
+		kind:        envelopeKindComing,
 		delay:       0,
 		attack:      0,
 		amount:      0,
@@ -61,6 +98,8 @@ func (l *envelopeParams) set(key string, value string) error {
 		l.enabled = value == "true"
 	case "destination":
 		l.destination = destinationFromString(value)
+	case "kind":
+		l.kind = envelopeKindFromString(value)
 	case "delay":
 		value, err := strconv.ParseFloat(value, 64)
 		if err != nil {
@@ -83,43 +122,39 @@ func (l *envelopeParams) set(key string, value string) error {
 	return nil
 }
 
-/*
-  [value-to-zero] filter_q, etc.
-  v +_
-	  | \_
-    |   \_
-    |     \_
-  0 +-------+---------
-    |attack |
-
-  [amount-to-value] freq, filter_freq, etc.
-  a +_
-	  | \_
-    |   \_
-    |     \_
-  v +       `-----
-	  |
-		+--------+--------
-    |attack  |
-
-  [zero-to-value] vibrato, tremolo, etc.
-  v +           ,-----
-	  |         _/
-    |       _/
-    |      /
-  0 +-----+------+----
-    |delay|attack|
-*/
 type envelope struct {
-	enabled bool
 	*adsr
+	enabled     bool
 	destination int
+	kind        int
+	amount      float64
 }
 
 func newEnvelope() *envelope {
 	return &envelope{
+		adsr:        &adsr{tvalue: &transitiveValue{}},
 		enabled:     false,
 		destination: destNone,
-		adsr:        &adsr{tvalue: &transitiveValue{}},
+		kind:        envelopeKindComing,
+		amount:      0,
 	}
+}
+func (a *envelope) applyParams(p *envelopeParams) {
+	a.destination = p.destination
+	a.kind = p.kind
+	a.amount = p.amount
+	a.base = 0
+	a.peak = 1
+	a.attack = 0
+	a.hold = p.delay
+	a.decay = p.attack
+	a.sustain = a.base
+	a.release = 0
+	if a.tvalue == nil {
+		a.tvalue = &transitiveValue{}
+	}
+	a.tvalue.value = a.base
+}
+func (a *envelope) noteOff() {
+	// noop
 }

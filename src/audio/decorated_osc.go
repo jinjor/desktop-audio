@@ -61,7 +61,7 @@ func (o *decoratedOsc) applyParams(
 	for i, envelope := range o.envelopes {
 		envelope.enabled = envelopeParams[i].enabled
 		envelope.destination = envelopeParams[i].destination
-		envelope.adsr.applyEnvelopeParams(envelopeParams[i])
+		envelope.applyParams(envelopeParams[i])
 	}
 }
 func (o *decoratedOsc) step(event int) float64 {
@@ -103,10 +103,14 @@ func (o *decoratedOsc) step(event int) float64 {
 			if !envelope.enabled {
 				continue
 			}
-			if envelope.destination == destLfoAmount[lfoIndex] || envelope.destination == destLfoAmount0V[lfoIndex] {
-				amountGain *= envelope.getValue()
+			v := envelope.getValue()
+			if envelope.kind == envelopeKindGoing {
+				v = 1 - v
+			}
+			if envelope.destination == destLfoAmount[lfoIndex] {
+				amountGain *= 1 - v
 			} else if envelope.destination == destLfoFreq[lfoIndex] {
-				lfoFreqRatio *= math.Pow(16.0, envelope.getValue())
+				lfoFreqRatio *= math.Pow(2.0, v)
 			}
 		}
 		_freqRatio, _phaseShift, _ampRatio, _noteFilterFreqRatio, _filterFreqRatio := lfo.step(o.oscs[0], amountGain, lfoFreqRatio) // TODO
@@ -120,24 +124,28 @@ func (o *decoratedOsc) step(event int) float64 {
 		if !envelope.enabled {
 			continue
 		}
+		v := envelope.getValue()
+		if envelope.kind == envelopeKindGoing {
+			v = 1 - v
+		}
 		if envelope.destination == destOsc0Volume {
-			osc0VolumeRatio *= envelope.getValue()
+			osc0VolumeRatio *= 1 - v
 		} else if envelope.destination == destOsc1Volume {
-			osc1VolumeRatio *= envelope.getValue()
+			osc1VolumeRatio *= 1 - v
 		} else if envelope.destination == destFreq {
-			freqRatio *= math.Pow(16.0, envelope.getValue())
+			freqRatio *= math.Pow(2.0, v*envelope.amount)
 		} else if envelope.destination == destNoteFilterFreq {
-			noteFilterFreqRatio *= math.Pow(16.0, envelope.getValue())
-		} else if envelope.destination == destNoteFilterQ || envelope.destination == destNoteFilterQ0V {
-			noteFilterQExponent *= envelope.getValue()
-		} else if envelope.destination == destNoteFilterGain || envelope.destination == destNoteFilterGain0V {
-			noteFilterGainRatio *= envelope.getValue()
+			noteFilterFreqRatio *= math.Pow(2.0, v*envelope.amount)
+		} else if envelope.destination == destNoteFilterQ {
+			noteFilterQExponent *= 1 - v
+		} else if envelope.destination == destNoteFilterGain {
+			noteFilterGainRatio *= 1 - v
 		} else if envelope.destination == destFilterFreq {
-			filterFreqRatio *= math.Pow(16.0, envelope.getValue())
-		} else if envelope.destination == destFilterQ || envelope.destination == destFilterQ0V {
-			filterQExponent *= envelope.getValue()
-		} else if envelope.destination == destFilterGain || envelope.destination == destFilterGain0V {
-			filterGainRatio *= envelope.getValue()
+			filterFreqRatio *= math.Pow(2.0, v*envelope.amount)
+		} else if envelope.destination == destFilterQ {
+			filterQExponent *= 1 - v
+		} else if envelope.destination == destFilterGain {
+			filterGainRatio *= 1 - v
 		}
 	}
 	value := 0.0
