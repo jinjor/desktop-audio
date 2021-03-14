@@ -157,7 +157,7 @@ const EnvelopeAmount = React.memo(
         exponential={false}
         value={o.value}
         onChange={o.onChange}
-        label="Freq Amount"
+        label="Freq Octave"
       />
     );
   }

@@ -3,6 +3,7 @@ package audio
 import (
 	"encoding/json"
 	"log"
+	"math"
 	"strconv"
 )
 
@@ -139,22 +140,63 @@ func newEnvelope() *envelope {
 		amount:      0,
 	}
 }
-func (a *envelope) applyParams(p *envelopeParams) {
-	a.destination = p.destination
-	a.kind = p.kind
-	a.amount = p.amount
-	a.base = 0
-	a.peak = 1
-	a.attack = 0
-	a.hold = p.delay
-	a.decay = p.attack
-	a.sustain = a.base
-	a.release = 0
-	if a.tvalue == nil {
-		a.tvalue = &transitiveValue{}
+func (e *envelope) applyParams(p *envelopeParams) {
+	e.destination = p.destination
+	e.kind = p.kind
+	e.amount = p.amount
+	e.base = 0
+	e.peak = 1
+	e.attack = 0
+	e.hold = p.delay
+	e.decay = p.attack
+	e.sustain = e.base
+	e.release = 0
+	if e.tvalue == nil {
+		e.tvalue = &transitiveValue{}
 	}
-	a.tvalue.value = a.base
+	e.tvalue.value = e.base
 }
-func (a *envelope) noteOff() {
+func (e *envelope) noteOff() {
 	// noop
+}
+func (e *envelope) step(m *modulation) {
+	if !e.enabled {
+		return
+	}
+	e.adsr.step()
+	v := e.adsr.getValue()
+	if e.kind == envelopeKindGoing {
+		v = 1 - v
+	}
+	if e.destination == destOsc0Volume {
+		m.oscVolumeRatio[0] *= 1 - v
+	} else if e.destination == destOsc1Volume {
+		m.oscVolumeRatio[1] *= 1 - v
+	} else if e.destination == destFreq {
+		m.freqRatio *= math.Pow(2.0, v*e.amount)
+	} else if e.destination == destNoteFilterFreq {
+		m.noteFilterFreqRatio *= math.Pow(2.0, v*e.amount)
+	} else if e.destination == destNoteFilterQ {
+		m.noteFilterQExponent *= 1 - v
+	} else if e.destination == destNoteFilterGain {
+		m.noteFilterGainRatio *= 1 - v
+	} else if e.destination == destFilterFreq {
+		m.filterFreqRatio *= math.Pow(2.0, v*e.amount)
+	} else if e.destination == destFilterQ {
+		m.filterQExponent *= 1 - v
+	} else if e.destination == destFilterGain {
+		m.filterGainRatio *= 1 - v
+	} else if e.destination == destLfo0Freq {
+		m.lfoFreqRatio[0] *= math.Pow(2.0, v)
+	} else if e.destination == destLfo1Freq {
+		m.lfoFreqRatio[1] *= math.Pow(2.0, v)
+	} else if e.destination == destLfo2Freq {
+		m.lfoFreqRatio[2] *= math.Pow(2.0, v)
+	} else if e.destination == destLfo0Amount {
+		m.lfoAmountGain[0] *= 1 - v
+	} else if e.destination == destLfo1Amount {
+		m.lfoAmountGain[1] *= 1 - v
+	} else if e.destination == destLfo2Amount {
+		m.lfoAmountGain[2] *= 1 - v
+	}
 }
