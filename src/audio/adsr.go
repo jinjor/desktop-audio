@@ -93,15 +93,16 @@ func (a *adsrParams) set(key string, value string) error {
     |a    |k  |d |      |r |
 */
 type adsr struct {
-	attack  float64 // ms
-	keep    float64 // ms
-	decay   float64 // ms
-	sustain float64 // 0-1
-	release float64 // ms
-	base    float64 // 0-1
-	peek    float64 // 0-1
-	phase   int     // "none", "attack", "keep", "decay", "sustain", "release"
-	tvalue  *transitiveValue
+	attack    float64 // ms
+	keep      float64 // ms
+	decay     float64 // ms
+	sustain   float64 // 0-1
+	release   float64 // ms
+	base      float64 // 0-1
+	peek      float64 // 0-1
+	noRelease bool
+	phase     int // "none", "attack", "keep", "decay", "sustain", "release"
+	tvalue    *transitiveValue
 }
 
 func (a *adsr) getValue() float64 {
@@ -155,6 +156,7 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 	a.decay = p.attack
 	a.sustain = a.base
 	a.release = 0
+	a.noRelease = true
 	if a.tvalue == nil {
 		a.tvalue = &transitiveValue{}
 	}
@@ -167,6 +169,9 @@ func (a *adsr) noteOn() {
 }
 
 func (a *adsr) noteOff() {
+	if a.noRelease {
+		return
+	}
 	a.phase = phaseRelease
 	a.tvalue.exponential(a.release, a.base, 0.001)
 }
