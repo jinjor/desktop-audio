@@ -11,7 +11,7 @@ import (
 const (
 	phaseNone = iota
 	phaseAttack
-	phaseKeep
+	phaseHold
 	phaseDecay
 	phaseSustain
 	phaseRelease
@@ -90,18 +90,18 @@ func (a *adsrParams) set(key string, value string) error {
     | /                  \
     |/                    \
   b +-----+---+--+------+---
-    |a    |k  |d |      |r |
+    |a    |h  |d |      |r |
 */
 type adsr struct {
 	attack    float64 // ms
-	keep      float64 // ms
+	hold      float64 // ms
 	decay     float64 // ms
 	sustain   float64 // 0-1
 	release   float64 // ms
 	base      float64 // 0-1
 	peek      float64 // 0-1
 	noRelease bool
-	phase     int // "none", "attack", "keep", "decay", "sustain", "release"
+	phase     int // "none", "attack", "hold", "decay", "sustain", "release"
 	tvalue    *transitiveValue
 }
 
@@ -112,7 +112,7 @@ func (a *adsr) setParams(p *adsrParams) {
 	a.base = 0
 	a.peek = 1
 	a.attack = p.attack
-	a.keep = 0
+	a.hold = 0
 	a.decay = p.decay
 	a.sustain = p.sustain
 	a.release = p.release
@@ -152,7 +152,7 @@ func (a *adsr) applyEnvelopeParams(p *envelopeParams) {
 		a.peek = 1
 	}
 	a.attack = 0
-	a.keep = p.delay
+	a.hold = p.delay
 	a.decay = p.attack
 	a.sustain = a.base
 	a.release = 0
@@ -180,10 +180,10 @@ func (a *adsr) step() {
 	switch a.phase {
 	case phaseAttack:
 		if a.tvalue.step() {
-			a.phase = phaseKeep
-			a.tvalue.linear(a.keep, a.peek)
+			a.phase = phaseHold
+			a.tvalue.linear(a.hold, a.peek)
 		}
-	case phaseKeep:
+	case phaseHold:
 		if a.tvalue.step() {
 			a.phase = phaseDecay
 			a.tvalue.exponential(a.decay, a.sustain, 0.001)
