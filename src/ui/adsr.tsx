@@ -53,7 +53,7 @@ const Decay = React.memo(
     return (
       <LabeledKnob
         min={0}
-        max={400}
+        max={800}
         steps={400}
         exponential={true}
         value={o.value}

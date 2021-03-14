@@ -50,7 +50,7 @@ const EchoDelay = React.memo(
       <LabeledKnob
         min={10}
         max={800}
-        steps={791}
+        steps={800}
         exponential={true}
         value={o.value}
         onChange={onChange}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { panic } from "./debug";
 
 const Tooptip = (o: {
   text: string;
@@ -54,11 +55,23 @@ export const Knob = (o: KnobOptions) => {
     y: number;
   } | null>(null);
   const size = 40;
+  const y = o.min === 0 ? (o.max - o.min) / 100 : 0;
   const range = o.max - o.min;
-  const v = range === 0 ? o.min : (o.value - o.min) / range;
+  let v;
+  if (o.exponential) {
+    v =
+      Math.log((o.value + y) / (o.min + y)) /
+      Math.log((o.max + y) / (o.min + y));
+  } else {
+    v = range === 0 ? o.min : (o.value - o.min) / range;
+  }
   const from = range === 0 ? o.min : ((o.from ?? o.min) - o.min) / range;
   const onInput = (v: number) => {
-    o.onChange(o.min + range * v);
+    if (o.exponential) {
+      o.onChange((o.min + y) * Math.pow((o.max + y) / (o.min + y), v) - y);
+    } else {
+      o.onChange(o.min + range * v);
+    }
   };
   return (
     <KnobHandler

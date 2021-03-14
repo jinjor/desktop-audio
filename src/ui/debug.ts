@@ -19,9 +19,12 @@ export const checkRenderingExclusive = (group: string, name: string) => {
   }
   const latestCheck = checkGroups.get(group)!;
   if (latestCheck.name !== name && now - latestCheck.timestamp < threshold) {
-    const message = `${latestCheck.name} and ${name} called in ${threshold}ms`;
-    document.body.textContent = `Error: ${message}`;
+    panic(`${latestCheck.name} and ${name} called in ${threshold}ms`);
   }
   latestCheck.name = name;
   latestCheck.timestamp = now;
+};
+
+export const panic = (message: string) => {
+  document.getElementById("error")!.textContent = new Error(message).stack!;
 };
